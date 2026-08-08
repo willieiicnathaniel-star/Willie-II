@@ -317,3 +317,92 @@ class ProfileUpdateRequest(BaseModel):
     name: str = None
     institution: str = None
     research_field: str = None
+
+
+# ---------------------------------------------------------------------------
+# Document Drafting & Roadmap Engine
+# ---------------------------------------------------------------------------
+
+class RoadmapRequest(BaseModel):
+    document_type: str = Field(..., description="Document type: research_article, thesis, literature_review, book_report, review_paper, conference_paper, research_proposal")
+    format: str = Field(default="general", description="Format key (e.g., Q1, Q2, undergraduate_usa, phd_chinese, systematic, etc.)")
+    topic: str = Field(..., description="Research topic or title")
+    field: str = Field(default="", description="Academic field (e.g., Economics, Public Health)")
+
+
+class RoadmapSection(BaseModel):
+    title: str
+    purpose: str
+    est_words: int
+    guidelines: str
+
+
+class RoadmapResponse(BaseModel):
+    document_type: str
+    document_type_label: str
+    format: str
+    format_description: str
+    topic: str
+    field: str
+    sections: list[RoadmapSection]
+    total_estimated_words: int
+    total_sections: int
+    roadmap_markdown: str
+    disclaimer: str
+
+
+class TopicSuggestionRequest(BaseModel):
+    field: str = Field(..., description="Research field key: economics, political_science, sociology, public_health, environment, education, technology, law, business, agriculture, interdisciplinary")
+    keywords: str = Field(default="", description="Optional comma-separated keywords to focus topic generation")
+    focus_novelty: bool = Field(default=True, description="If true, prioritize topics that have not been researched before")
+    max_topics: int = Field(default=10, description="Maximum number of topic suggestions to return")
+
+
+class TopicSuggestion(BaseModel):
+    topic: str
+    field: str
+    sub_area: str
+    novelty_factors: list[str]
+    suggested_methodology: list[str]
+    research_gap: str
+    estimated_difficulty: str
+    potential_journals: list[str]
+
+
+class TopicSuggestionResponse(BaseModel):
+    field: str
+    sub_areas: list[str]
+    topics: list[TopicSuggestion]
+    total: int
+    note: str
+
+
+class OpenAccessArticleRequest(BaseModel):
+    topic: str = Field(..., description="Research topic to find open-access articles for")
+    max_results: int = Field(default=15, description="Maximum number of articles to return")
+
+
+class OpenAccessArticle(BaseModel):
+    title: str
+    authors: list[str]
+    year: Optional[int] = None
+    journal: Optional[str] = None
+    doi: Optional[str] = None
+    abstract: Optional[str] = None
+    cited_by_count: int = 0
+    is_open_access: bool = True
+    pdf_url: str
+    oa_url: Optional[str] = None
+    source: str = ""
+    license: Optional[str] = None
+
+
+class OpenAccessArticleResponse(BaseModel):
+    topic: str
+    total_found: int
+    articles: list[dict]
+    search_timestamp: str
+
+
+class DownloadPdfRequest(BaseModel):
+    url: str = Field(..., description="Direct PDF URL to download")

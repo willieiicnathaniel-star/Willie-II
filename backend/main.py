@@ -19,10 +19,11 @@ Features:
 
 import os
 import re
+import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -80,6 +81,17 @@ from .references import (
     verify_citations,
 )
 from .models import DocumentExportRequest
+
+from .document_drafting import (
+    generate_roadmap, get_document_types, get_research_fields,
+    suggest_research_topics, find_open_access_articles, download_pdf,
+)
+from .models import (
+    RoadmapRequest, RoadmapResponse,
+    TopicSuggestionRequest, TopicSuggestionResponse,
+    OpenAccessArticleRequest, OpenAccessArticleResponse,
+    DownloadPdfRequest,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +385,21 @@ async def require_admin(user=Depends(require_auth)):
     if not is_admin(user):
         raise HTTPException(status_code=403, detail="Admin access required.")
     return user
+
+
+async def _require_auth(request: Request):
+    """Manual auth check for Request-based endpoints (non-Depends pattern).
+    Returns a JSONResponse error if not authenticated, or None if OK."""
+    auth = request.headers.get("authorization")
+    if not auth:
+        return JSONResponse(status_code=401, content={"detail": "Authentication required. Please login."})
+    token = auth[7:] if auth.startswith("Bearer ") else auth
+    user = verify_token(token)
+    if not user:
+        return JSONResponse(status_code=401, content={"detail": "Invalid or expired token."})
+    if not user.is_active:
+        return JSONResponse(status_code=403, content={"detail": "Account deactivated."})
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1222,6 +1249,89 @@ async def export_document_endpoint(request: DocumentExportRequest, user=Depends(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="Export failed: {}".format(str(e)))
+
+
+# ---------------------------------------------------------------------------
+# Document Drafting & Roadmap Engine (requires auth)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/drafting/document-types")
+async def drafting_document_types(user=Depends(require_auth)):
+    """Get all available document types and their format options."""
+    return {"document_types": get_document_types()}
+
+
+@app.get("/api/drafting/research-fields")
+async def drafting_research_fields(user=Depends(require_auth)):
+    """Get all available research fields for topic suggestion."""
+    return {"research_fields": get_research_fields()}
+
+
+@app.post("/api/drafting/roadmap")
+async def drafting_roadmap(request: RoadmapRequest, user=Depends(require_auth)):
+    """Generate a full document roadmap (structure, sections, word estimates, writing guidelines)
+    for research articles, theses, literature reviews, book reports, review papers, etc.
+    Supports Q1-Q4 journals and thesis formats from Chinese, USA, European, African, and UK traditions."""
+    try:
+        record_stat("drafting_roadmap", {"document_type": request.document_type})
+        result = generate_roadmap(
+            document_type=request.document_type,
+            format=request.format,
+            topic=request.topic,
+            field=request.field,
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Roadmap generation error: {str(e)}")
+
+
+@app.post("/api/drafting/topics")
+async def drafting_topics(request: TopicSuggestionRequest, user=Depends(require_auth)):
+    """Suggest novel research topics from all fields of study.
+    Prioritizes topics that have not been researched before, with novelty analysis,
+    methodology recommendations, and target journals."""
+    try:
+        record_stat("drafting_topics", {"field": request.field})
+        result = suggest_research_topics(
+            field=request.field,
+            keywords=request.keywords,
+            focus_novelty=request.focus_novelty,
+            max_topics=request.max_topics,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Topic suggestion error: {str(e)}")
+
+
+@app.post("/api/drafting/open-access-articles")
+async def drafting_open_access_articles(request: OpenAccessArticleRequest, user=Depends(require_auth)):
+    """Find open-access articles from all OA journal platforms that best suit a given topic.
+    Searches OpenAlex and Semantic Scholar for papers with downloadable PDFs."""
+    try:
+        record_stat("drafting_oa_articles", {"topic": request.topic[:50]})
+        result = await find_open_access_articles(
+            topic=request.topic,
+            max_results=request.max_results,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Open-access article search error: {str(e)}")
+
+
+@app.post("/api/drafting/download-pdf")
+async def drafting_download_pdf(request: DownloadPdfRequest, user=Depends(require_auth)):
+    """Download a PDF from an open-access article URL directly through THEeye.
+    Returns the PDF file as a binary download."""
+    try:
+        content, filename, content_type = await download_pdf(request.url)
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return Response(content=content, media_type=content_type, headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF download failed: {str(e)}")
 
 
 # ---------------------------------------------------------------------------

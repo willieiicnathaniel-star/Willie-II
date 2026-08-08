@@ -3039,3 +3039,440 @@ window.toggleUserActive = toggleUserActive;
 window.deleteUser = deleteUser;
 window.toggleDatabaseSource = toggleDatabaseSource;
 window.toggleToolIntegration = toggleToolIntegration;
+
+
+// ===========================================================================
+// DRAFTING ASSISTANT — Document Roadmap, Research Topics, Open-Access Articles
+// ===========================================================================
+
+// ---- Document type format data (mirrors backend DOCUMENT_TYPES) ----
+const DOC_TYPE_FORMATS = {
+    research_article: {
+        Q1: "Top-tier journal (Nature, Science, top field journals). Strict structure, high novelty, comprehensive methodology.",
+        Q2: "High-quality journal. Standard IMRaD, solid contribution, robust methodology.",
+        Q3: "Established journal. Standard structure, adequate contribution.",
+        Q4: "Emerging/regional journal. Standard structure, contextual contribution.",
+        general: "General research article format suitable for most journals.",
+    },
+    thesis: {
+        undergraduate_usa: "Undergraduate Thesis (USA): Intro, Lit Review, Methodology, Results, Discussion, Conclusion. 40-60 pages.",
+        undergraduate_uk: "Undergraduate Dissertation (UK): Intro, Lit Review, Methodology, Findings, Discussion, Conclusion. 10,000-15,000 words.",
+        undergraduate_european: "Undergraduate Thesis (European): Intro, Theoretical Framework, Methodology, Empirical Analysis, Discussion, Conclusion. 30-50 pages.",
+        undergraduate_chinese: "Undergraduate Thesis (Chinese): 摘要, 关键词, 引言, 文献综述, 研究方法, 研究结果, 讨论, 结论, 参考文献, 致谢. 8,000-15,000 characters.",
+        undergraduate_african: "Undergraduate Project (African): Title Page, Declaration, Dedication, Acknowledgments, Abstract, TOC, Chapters 1-5, References, Appendices. 40-60 pages.",
+        graduate_usa: "Master's Thesis (USA): Intro, Lit Review, Methodology, Results, Discussion, Conclusion, References, Appendices. 60-100 pages.",
+        graduate_uk: "Master's Dissertation (UK): 15,000-20,000 words. Standard structure.",
+        graduate_european: "Master's Thesis (European): Intro, Theoretical Framework, Lit Review, Methodology, Empirical Analysis, Discussion, Policy Implications, Conclusion. 60-80 pages.",
+        graduate_chinese: "Master's Thesis (Chinese): 摘要, 绪论, 文献综述, 理论框架, 研究方法, 实证分析, 讨论, 结论与展望. 30,000-50,000 characters.",
+        graduate_african: "Master's Dissertation (African): Title Page, Declaration, Certification, Chapters 1-6, References, Appendices. 80-120 pages.",
+        phd_usa: "PhD Dissertation (USA): Intro, comprehensive Lit Review, Theoretical Framework, Methodology, multiple Results chapters, Discussion, Conclusion. 150-300 pages.",
+        phd_uk: "PhD Thesis (UK): Intro, Lit Review, Methodology, Results, Discussion, Conclusion. 80,000-100,000 words.",
+        phd_european: "PhD Thesis (European): Intro, Theoretical Framework, Lit Review, Methodology, multiple Empirical chapters, Discussion, Policy Implications, Conclusion. 150-250 pages.",
+        phd_chinese: "PhD Dissertation (Chinese): 摘要, 绪论, 文献综述, 理论框架与研究假设, 研究设计与方法, 实证分析, 进一步分析, 结论与政策建议. 80,000-150,000 characters.",
+        phd_african: "PhD Thesis (African): Title Page, Declaration, Certification, Chapters 1-7, References, Appendices. 200-350 pages.",
+    },
+    literature_review: {
+        systematic: "Systematic Literature Review (PRISMA): Intro, Methods (search strategy, inclusion/exclusion), Results (PRISMA flow), Discussion, Conclusion.",
+        narrative: "Narrative Literature Review: Intro, Thematic Sections, Discussion, Conclusion, References.",
+        scoping: "Scoping Review: Intro, Methods (framework, search), Results (charting data), Discussion, Conclusion.",
+        bibliometric: "Bibliometric Review: Intro, Data and Methods, Descriptive Results, Citation Analysis, Co-citation Analysis, Discussion, Conclusion.",
+    },
+    book_report: {
+        analytical: "Analytical Book Report: Bibliographic Info, Intro, Summary (chapter-by-chapter), Critical Analysis, Themes, Strengths/Weaknesses, Conclusion.",
+        comparative: "Comparative Book Report: Intro, Summary of Each Book, Comparative Analysis, Thematic Discussion, Conclusion.",
+        academic_review: "Academic Book Review: Bibliographic Info, Brief Summary, Critical Evaluation, Contribution to Field, Recommendation.",
+    },
+    review_paper: {
+        Q1: "Top-tier review paper: Abstract, Intro, Search Strategy, Thematic Analysis, Critical Synthesis, Research Agenda, Conclusion. 100+ references.",
+        Q2: "Standard review paper: Abstract, Intro, Literature Search, Thematic Review, Discussion, Future Directions, Conclusion. 50-100 references.",
+        Q3: "Review paper: Abstract, Intro, Literature Review, Discussion, Conclusion. 30-50 references.",
+        narrative: "Narrative review: Abstract, Intro, Background, Review Sections, Discussion, Conclusion.",
+    },
+    conference_paper: {
+        full: "Full Conference Paper: Abstract, Intro, Related Work, Methodology, Results, Discussion, Conclusion. 8-12 pages.",
+        short: "Short Paper / Poster: Abstract, Intro, Approach, Preliminary Results, Conclusion. 4-6 pages.",
+        workshop: "Workshop Paper: Abstract, Intro, Methodology, Results, Discussion. 6-8 pages.",
+    },
+    research_proposal: {
+        grant: "Grant Proposal: Title, Abstract, Background, Specific Aims, Research Strategy, Timeline, Budget Justification, References.",
+        academic: "Academic Research Proposal: Title, Intro, Lit Review, Research Questions, Methodology, Timeline, Expected Outcomes, References.",
+        phd_proposal: "PhD Research Proposal: Title, Intro, Research Gap, Questions, Lit Review, Theoretical Framework, Methodology, Timeline. 3,000-5,000 words.",
+    },
+};
+
+
+// ---- Format dropdown population ----
+function updateRoadmapFormats() {
+    const docType = document.getElementById('roadmapDocType').value;
+    const formatSelect = document.getElementById('roadmapFormat');
+    const formats = DOC_TYPE_FORMATS[docType] || {};
+    formatSelect.innerHTML = '';
+    for (const [key, desc] of Object.entries(formats)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        // Truncate description for the dropdown label
+        const shortDesc = desc.length > 80 ? desc.substring(0, 77) + '...' : desc;
+        opt.textContent = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ' — ' + shortDesc;
+        formatSelect.appendChild(opt);
+    }
+}
+
+
+// ---- Drafting sub-tab switching ----
+document.querySelectorAll('.drafting-subtab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.drafting-subtab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.subtab;
+        document.querySelectorAll('.drafting-subpanel').forEach(p => {
+            p.classList.remove('active');
+            p.style.display = 'none';
+        });
+        const panel = document.getElementById('drafting' + target);
+        if (panel) { panel.classList.add('active'); panel.style.display = 'block'; }
+    });
+});
+
+
+// ---- Initialize format dropdown on load ----
+updateRoadmapFormats();
+
+
+// ===========================================================================
+// ROADMAP GENERATION
+// ===========================================================================
+
+document.getElementById('generateRoadmapBtn').addEventListener('click', async () => {
+    const docType = document.getElementById('roadmapDocType').value;
+    const format = document.getElementById('roadmapFormat').value;
+    const topic = document.getElementById('roadmapTopic').value.trim();
+    const field = document.getElementById('roadmapField').value.trim();
+
+    if (!topic) {
+        showStatus('roadmapStatus', 'Please enter a research topic or title.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('generateRoadmapBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Generating...';
+    showStatus('roadmapStatus', 'Generating document roadmap...', 'loading');
+    document.getElementById('roadmapResults').innerHTML = '';
+
+    try {
+        const resp = await apiFetch('/api/drafting/roadmap', {
+            method: 'POST',
+            body: JSON.stringify({ document_type: docType, format, topic, field }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        hideStatus('roadmapStatus');
+        showStatus('roadmapStatus',
+            `Roadmap generated: ${data.total_sections} sections, ~${data.total_estimated_words.toLocaleString()} estimated words.`,
+            'success');
+        renderRoadmap(data);
+    } catch (err) {
+        showStatus('roadmapStatus', `Failed: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '\u{1F4CE} Generate Roadmap';
+    }
+});
+
+
+function renderRoadmap(data) {
+    const container = document.getElementById('roadmapResults');
+
+    const sectionsHtml = data.sections.map((s, i) => `
+        <div class="roadmap-section">
+            <div class="roadmap-section-header">
+                <h4>${escapeHtml(s.title)}</h4>
+                <span class="roadmap-word-est">${s.est_words.toLocaleString()} words</span>
+            </div>
+            <p class="roadmap-purpose"><strong>Purpose:</strong> ${escapeHtml(s.purpose)}</p>
+            <p class="roadmap-guidelines"><strong>Writing Guidelines:</strong> ${escapeHtml(s.guidelines)}</p>
+        </div>
+    `).join('');
+
+    const fullMarkdown = data.roadmap_markdown;
+
+    container.innerHTML = `
+        <div class="roadmap-summary-bar">
+            <div class="roadmap-meta">
+                <span><strong>Type:</strong> ${escapeHtml(data.document_type_label)}</span>
+                <span><strong>Format:</strong> ${escapeHtml(data.format)}</span>
+                <span><strong>Field:</strong> ${escapeHtml(data.field || 'Not specified')}</span>
+                <span><strong>Sections:</strong> ${data.total_sections}</span>
+                <span><strong>Est. Words:</strong> ${data.total_estimated_words.toLocaleString()}</span>
+            </div>
+            <div class="roadmap-actions">
+                <button class="btn-copy" onclick="copyGeneratedText(this, ${JSON.stringify(fullMarkdown).replace(/'/g, '&#39;')})">
+                    &#128203; Copy Roadmap
+                </button>
+                <button class="btn-secondary btn-sm" onclick="downloadRoadmapMd(${JSON.stringify(fullMarkdown).replace(/'/g, '&#39;')}, ${JSON.stringify(data.topic).replace(/'/g, '&#39;')})">
+                    &#128190; Download .md
+                </button>
+            </div>
+        </div>
+        <div class="roadmap-format-desc">${escapeHtml(data.format_description)}</div>
+        <div class="roadmap-sections-list">${sectionsHtml}</div>
+        <div class="roadmap-disclaimer">${escapeHtml(data.disclaimer)}</div>
+    `;
+}
+
+
+function downloadRoadmapMd(text, topic) {
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'THEeye_Roadmap_' + topic.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 40) + '.md';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+
+// ===========================================================================
+// RESEARCH TOPIC SUGGESTION
+// ===========================================================================
+
+document.getElementById('suggestTopicsBtn').addEventListener('click', async () => {
+    const field = document.getElementById('topicField').value;
+    const keywords = document.getElementById('topicKeywords').value.trim();
+    const focusNovelty = document.getElementById('topicNovelty').checked;
+    const maxTopics = parseInt(document.getElementById('topicMax').value) || 10;
+
+    const btn = document.getElementById('suggestTopicsBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Suggesting...';
+    showStatus('topicsStatus', 'Generating novel research topic suggestions...', 'loading');
+    document.getElementById('topicsResults').innerHTML = '';
+
+    try {
+        const resp = await apiFetch('/api/drafting/topics', {
+            method: 'POST',
+            body: JSON.stringify({ field, keywords, focus_novelty: focusNovelty, max_topics: maxTopics }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        hideStatus('topicsStatus');
+        showStatus('topicsStatus', `Found ${data.total} topic suggestions in ${data.field}.`, 'success');
+        renderTopics(data);
+    } catch (err) {
+        showStatus('topicsStatus', `Failed: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '\u{1F4A1} Suggest Topics';
+    }
+});
+
+
+function renderTopics(data) {
+    const container = document.getElementById('topicsResults');
+
+    const topicsHtml = data.topics.map((t, i) => `
+        <div class="topic-card">
+            <div class="topic-card-header">
+                <span class="topic-number">#${i + 1}</span>
+                <h4>${escapeHtml(t.topic)}</h4>
+                <span class="topic-difficulty difficulty-${t.estimated_difficulty.toLowerCase()}">${t.estimated_difficulty}</span>
+            </div>
+            <div class="topic-card-body">
+                <p class="topic-gap"><strong>Research Gap:</strong> ${escapeHtml(t.research_gap)}</p>
+                <div class="topic-novelty">
+                    <strong>Novelty Factors:</strong>
+                    <ul>${t.novelty_factors.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+                </div>
+                <div class="topic-methodology">
+                    <strong>Suggested Methodology:</strong>
+                    <ul>${t.suggested_methodology.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>
+                </div>
+                <div class="topic-journals">
+                    <strong>Potential Journals:</strong>
+                    ${t.potential_journals.map(j => `<span class="journal-tag">${escapeHtml(j)}</span>`).join('')}
+                </div>
+                <div class="topic-card-actions">
+                    <button class="btn-secondary btn-sm" onclick="searchOATopics(${JSON.stringify(t.topic).replace(/'/g, '&#39;')})">
+                        &#128196; Find Open-Access Articles
+                    </button>
+                    <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, ${JSON.stringify(t.topic).replace(/'/g, '&#39;')})">
+                        &#128203; Copy Topic
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    const subAreasHtml = data.sub_areas.map(s => `<span class="sub-area-tag">${escapeHtml(s)}</span>`).join('');
+
+    container.innerHTML = `
+        <div class="topics-summary">
+            <p><strong>Field:</strong> ${escapeHtml(data.field)}</p>
+            <div class="sub-areas"><strong>Sub-areas:</strong> ${subAreasHtml}</div>
+            <p class="topics-note">${escapeHtml(data.note)}</p>
+        </div>
+        <div class="topics-list">${topicsHtml}</div>
+    `;
+}
+
+
+// ===========================================================================
+// OPEN-ACCESS ARTICLE FINDER
+// ===========================================================================
+
+document.getElementById('findArticlesBtn').addEventListener('click', async () => {
+    const topic = document.getElementById('oaTopic').value.trim();
+    const maxResults = parseInt(document.getElementById('oaMax').value) || 15;
+
+    if (!topic) {
+        showStatus('articlesStatus', 'Please enter a research topic.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('findArticlesBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Searching...';
+    showStatus('articlesStatus', 'Searching OpenAlex and Semantic Scholar for open-access articles with PDFs...', 'loading');
+    document.getElementById('articlesResults').innerHTML = '';
+
+    try {
+        const resp = await apiFetch('/api/drafting/open-access-articles', {
+            method: 'POST',
+            body: JSON.stringify({ topic, max_results: maxResults }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        hideStatus('articlesStatus');
+        if (data.total_found === 0) {
+            showStatus('articlesStatus', 'No open-access articles with PDFs found. Try a broader topic.', 'error');
+        } else {
+            showStatus('articlesStatus', `Found ${data.total_found} open-access articles with downloadable PDFs.`, 'success');
+        }
+        renderOAArticles(data);
+    } catch (err) {
+        showStatus('articlesStatus', `Failed: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '\u{1F4C4} Find Articles';
+    }
+});
+
+
+function renderOAArticles(data) {
+    const container = document.getElementById('articlesResults');
+
+    if (!data.articles || data.articles.length === 0) {
+        container.innerHTML = '<p class="placeholder-text">No articles found. Try a different topic or broader keywords.</p>';
+        return;
+    }
+
+    const articlesHtml = data.articles.map((a, i) => {
+        const authors = a.authors && a.authors.length > 0
+            ? a.authors.join(', ') + (a.authors.length > 5 ? ' et al.' : '')
+            : 'Unknown';
+        const abstract = a.abstract
+            ? (a.abstract.length > 300 ? escapeHtml(a.abstract.substring(0, 297)) + '...' : escapeHtml(a.abstract))
+            : '<em>No abstract available</em>';
+        const yearStr = a.year ? `(${a.year})` : '';
+        const journalStr = a.journal ? `<em>${escapeHtml(a.journal)}</em>` : '';
+        const doiLink = a.doi
+            ? `<a href="https://doi.org/${escapeHtml(a.doi)}" target="_blank" class="doi-link">${escapeHtml(a.doi)}</a>`
+            : '';
+        const sourceTag = a.source ? `<span class="source-tag">${escapeHtml(a.source)}</span>` : '';
+
+        return `
+            <div class="oa-article-card">
+                <div class="oa-article-header">
+                    <span class="oa-article-number">#${i + 1}</span>
+                    <h4>${escapeHtml(a.title)}</h4>
+                    ${a.cited_by_count > 0 ? `<span class="citation-count">&#128279; ${a.cited_by_count} citations</span>` : ''}
+                </div>
+                <div class="oa-article-meta">
+                    <span class="oa-authors">${escapeHtml(authors)} ${yearStr}</span>
+                    ${journalStr ? '<span class="oa-journal">' + journalStr + '</span>' : ''}
+                    ${doiLink}
+                    ${sourceTag}
+                    ${a.license ? `<span class="license-tag">${escapeHtml(a.license)}</span>` : ''}
+                </div>
+                <div class="oa-article-abstract">${abstract}</div>
+                <div class="oa-article-actions">
+                    <button class="btn-primary btn-sm" onclick="downloadArticlePdf(${JSON.stringify(a.pdf_url).replace(/'/g, '&#39;')})">
+                        &#128190; Download PDF
+                    </button>
+                    <a href="${escapeHtml(a.oa_url || a.pdf_url)}" target="_blank" class="btn-secondary btn-sm">
+                        &#128279; Open in Browser
+                    </a>
+                    <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, ${JSON.stringify(a.title + ' | ' + authors + ' ' + yearStr + ' | ' + (a.doi || a.pdf_url)).replace(/'/g, '&#39;')})">
+                        &#128203; Copy Citation
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `<div class="oa-articles-list">${articlesHtml}</div>`;
+}
+
+
+async function downloadArticlePdf(url) {
+    try {
+        const resp = await apiFetch('/api/drafting/download-pdf', {
+            method: 'POST',
+            body: JSON.stringify({ url }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const blob = await resp.blob();
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        // Try to get filename from Content-Disposition
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="?([^"]+)"?/);
+        a.download = match ? match[1] : 'THEeye_article.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+        alert('PDF download failed: ' + err.message + '\n\nYou can try opening the URL directly in your browser.');
+        window.open(url, '_blank');
+    }
+}
+
+
+// ---- Cross-tab: search OA articles from a topic suggestion ----
+function searchOATopics(topic) {
+    // Switch to the Articles sub-tab
+    document.querySelectorAll('.drafting-subtab').forEach(b => b.classList.remove('active'));
+    document.querySelector('.drafting-subtab[data-subtab="Articles"]').classList.add('active');
+    document.querySelectorAll('.drafting-subpanel').forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+    });
+    const panel = document.getElementById('draftingArticles');
+    panel.classList.add('active');
+    panel.style.display = 'block';
+
+    // Fill the topic and trigger search
+    document.getElementById('oaTopic').value = topic;
+    document.getElementById('findArticlesBtn').click();
+}
+
+
+// ---- Expose global functions for inline onclick handlers ----
+window.updateRoadmapFormats = updateRoadmapFormats;
+window.downloadArticlePdf = downloadArticlePdf;
+window.searchOATopics = searchOATopics;
+window.downloadRoadmapMd = downloadRoadmapMd;

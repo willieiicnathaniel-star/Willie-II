@@ -284,36 +284,163 @@
         <section id="draft" class="tab-panel">
             <div class="panel-header">
                 <h2>Drafting Assistant</h2>
-                <p>Generate academic draft sections grounded in your retrieved sources. All drafts include proper citations and an integrity disclaimer.</p>
+                <p>Generate full document roadmaps for any journal (Q1-Q4), thesis (Undergraduate/Graduate/PhD in Chinese, USA, European, African, UK formats), literature review, book report, or review paper. Discover novel research topics across all fields. Find and download open-access articles as PDFs. Draft academic sections with citations.</p>
             </div>
 
-            <div class="draft-form">
-                <div class="form-row">
-                    <label class="filter-input">
-                        <span class="label-text">Section type:</span>
-                        <select id="sectionType">
-                            <option value="literature_review">Literature Review</option>
-                            <option value="introduction">Introduction</option>
-                            <option value="abstract">Abstract</option>
-                            <option value="conclusion">Conclusion</option>
-                            <option value="summary">Summary</option>
-                        </select>
-                    </label>
-                    <input type="text" id="draftTopic" placeholder="Research topic, e.g., FDI and economic growth in Mano River Union" class="input-large">
-                    <button id="draftBtn" class="btn-primary">Generate Draft</button>
+            <!-- Sub-tab navigation -->
+            <div class="drafting-sub-tabs">
+                <button class="drafting-subtab active" data-subtab="Roadmap">&#128206; Document Roadmap</button>
+                <button class="drafting-subtab" data-subtab="Topics">&#128161; Research Topics</button>
+                <button class="drafting-subtab" data-subtab="Articles">&#128196; Open-Access Articles</button>
+                <button class="drafting-subtab" data-subtab="DraftSection">&#9998; Draft Section</button>
+            </div>
+
+            <!-- ============ DOCUMENT ROADMAP SUB-TAB ============ -->
+            <div id="draftingRoadmap" class="drafting-subpanel active">
+                <div class="drafting-form">
+                    <div class="form-row">
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Document type:</span>
+                            <select id="roadmapDocType" onchange="updateRoadmapFormats()">
+                                <option value="research_article">Research Article (Journal)</option>
+                                <option value="thesis">Thesis / Dissertation</option>
+                                <option value="literature_review">Literature Review</option>
+                                <option value="book_report">Book Report</option>
+                                <option value="review_paper">Review Paper</option>
+                                <option value="conference_paper">Conference Paper</option>
+                                <option value="research_proposal">Research Proposal</option>
+                            </select>
+                        </label>
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Format / Standard:</span>
+                            <select id="roadmapFormat"></select>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input" style="flex:3;">
+                            <span class="label-text">Research topic / title:</span>
+                            <input type="text" id="roadmapTopic" placeholder="e.g., FDI and economic growth in Mano River Union countries">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Academic field:</span>
+                            <input type="text" id="roadmapField" placeholder="e.g., Economics" list="fieldList">
+                            <datalist id="fieldList">
+                                <option value="Economics">
+                                <option value="Political Science">
+                                <option value="Sociology">
+                                <option value="Public Health">
+                                <option value="Environmental Science">
+                                <option value="Education">
+                                <option value="Computer Science">
+                                <option value="Law">
+                                <option value="Business">
+                                <option value="Agriculture">
+                            </datalist>
+                        </label>
+                        <button id="generateRoadmapBtn" class="btn-primary">&#128206; Generate Roadmap</button>
+                    </div>
                 </div>
-                <div class="form-row">
-                    <label class="filter-input">
-                        <span class="label-text">Max words:</span>
-                        <input type="number" id="maxWords" value="1000" min="100" max="3000">
-                    </label>
+                <div id="roadmapStatus" class="status-message" style="display:none;"></div>
+                <div id="roadmapResults" class="results-container">
+                    <p class="placeholder-text">Select a document type and format, enter your topic, and generate a complete section-by-section roadmap with word estimates and writing guidelines.</p>
                 </div>
             </div>
 
-            <div id="draftStatus" class="status-message" style="display:none;"></div>
+            <!-- ============ RESEARCH TOPICS SUB-TAB ============ -->
+            <div id="draftingTopics" class="drafting-subpanel" style="display:none;">
+                <div class="drafting-form">
+                    <div class="form-row">
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Research field:</span>
+                            <select id="topicField">
+                                <option value="economics">Economics &amp; Finance</option>
+                                <option value="political_science">Political Science &amp; International Relations</option>
+                                <option value="sociology">Sociology &amp; Social Sciences</option>
+                                <option value="public_health">Public Health &amp; Medicine</option>
+                                <option value="environment">Environmental Science &amp; Climate</option>
+                                <option value="education">Education &amp; Pedagogy</option>
+                                <option value="technology">Computer Science &amp; Technology</option>
+                                <option value="law">Law &amp; Legal Studies</option>
+                                <option value="business">Business &amp; Management</option>
+                                <option value="agriculture">Agriculture &amp; Food Science</option>
+                                <option value="interdisciplinary">Interdisciplinary &amp; Emerging Fields</option>
+                            </select>
+                        </label>
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Keywords (optional, comma-separated):</span>
+                            <input type="text" id="topicKeywords" placeholder="e.g., institutional quality, FDI, post-conflict">
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Max topics:</span>
+                            <input type="number" id="topicMax" value="10" min="3" max="25">
+                        </label>
+                        <label class="filter-input" style="display:flex;align-items:center;gap:0.5rem;">
+                            <input type="checkbox" id="topicNovelty" checked>
+                            <span class="label-text" style="margin:0;">Focus on novel/unresearched topics</span>
+                        </label>
+                        <button id="suggestTopicsBtn" class="btn-primary">&#128161; Suggest Topics</button>
+                    </div>
+                </div>
+                <div id="topicsStatus" class="status-message" style="display:none;"></div>
+                <div id="topicsResults" class="results-container">
+                    <p class="placeholder-text">Select a research field and get novel topic suggestions with novelty analysis, methodology recommendations, and target journals.</p>
+                </div>
+            </div>
 
-            <div id="draftResults" class="results-container">
-                <p class="placeholder-text">Generated drafts will appear here. Drafts use papers from your latest search results.</p>
+            <!-- ============ OPEN-ACCESS ARTICLES SUB-TAB ============ -->
+            <div id="draftingArticles" class="drafting-subpanel" style="display:none;">
+                <div class="drafting-form">
+                    <div class="form-row">
+                        <label class="filter-input" style="flex:3;">
+                            <span class="label-text">Research topic:</span>
+                            <input type="text" id="oaTopic" placeholder="e.g., climate finance and green bond effectiveness in emerging markets">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Max results:</span>
+                            <input type="number" id="oaMax" value="15" min="5" max="50">
+                        </label>
+                        <button id="findArticlesBtn" class="btn-primary">&#128196; Find Articles</button>
+                    </div>
+                    <p style="font-size:0.85rem;color:#718096;margin-top:0.5rem;">
+                        Searches OpenAlex and Semantic Scholar for open-access papers with downloadable PDFs. Click the download button on any article to get the PDF directly through THEeye.
+                    </p>
+                </div>
+                <div id="articlesStatus" class="status-message" style="display:none;"></div>
+                <div id="articlesResults" class="results-container">
+                    <p class="placeholder-text">Enter a research topic to find open-access articles with direct PDF download links from all OA journal platforms.</p>
+                </div>
+            </div>
+
+            <!-- ============ DRAFT SECTION SUB-TAB (original) ============ -->
+            <div id="draftingDraftSection" class="drafting-subpanel" style="display:none;">
+                <div class="draft-form">
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Section type:</span>
+                            <select id="sectionType">
+                                <option value="literature_review">Literature Review</option>
+                                <option value="introduction">Introduction</option>
+                                <option value="abstract">Abstract</option>
+                                <option value="conclusion">Conclusion</option>
+                                <option value="summary">Summary</option>
+                            </select>
+                        </label>
+                        <input type="text" id="draftTopic" placeholder="Research topic, e.g., FDI and economic growth in Mano River Union" class="input-large">
+                        <button id="draftBtn" class="btn-primary">Generate Draft</button>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Max words:</span>
+                            <input type="number" id="maxWords" value="1000" min="100" max="3000">
+                        </label>
+                    </div>
+                </div>
+                <div id="draftStatus" class="status-message" style="display:none;"></div>
+                <div id="draftResults" class="results-container">
+                    <p class="placeholder-text">Generated drafts will appear here. Drafts use papers from your latest search results.</p>
+                </div>
             </div>
         </section>
 
