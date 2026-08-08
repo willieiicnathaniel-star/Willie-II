@@ -1,0 +1,1004 @@
+"""
+THEeye - Writing Tools Module
+Integration with external writing enhancement tools and local writing analysis.
+
+Tools integrated:
+  - Grammarly: Grammar, style, and clarity checking
+  - QuillBot: Paraphrasing and rewriting
+  - Paperpal: Academic writing assistant
+
+Local features:
+  - Readability analysis (Flesch-Kincaid, Gunning Fog)
+  - Academic tone assessment
+  - Passive voice detection
+  - Sentence structure analysis
+"""
+
+import re
+import math
+from typing import Optional
+
+
+# ---------------------------------------------------------------------------
+# Tool Registry
+# ---------------------------------------------------------------------------
+
+WRITING_TOOLS = {
+    "grammarly": {
+        "name": "Grammarly",
+        "url": "https://www.grammarly.com",
+        "description": "AI-powered grammar, spelling, punctuation, style, and tone checker. "
+                       "Offers real-time suggestions for clarity, engagement, and delivery.",
+        "category": "grammar_style",
+        "features": [
+            "Grammar and spell check",
+            "Style and tone suggestions",
+            "Clarity improvements",
+            "Plagiarism detection (premium)",
+            "Vocabulary enhancement",
+        ],
+        "how_to_use": [
+            "1. Go to grammarly.com and create an account",
+            "2. Upload your draft or paste text into the Grammarly editor",
+            "3. Review and accept/reject suggestions",
+            "4. Copy the improved text back to your document",
+        ],
+        "integration_type": "external_link",
+        "free_tier": True,
+    },
+    "quillbot": {
+        "name": "QuillBot",
+        "url": "https://quillbot.com",
+        "description": "AI-powered paraphrasing and rewriting tool. Offers multiple modes "
+                       "(Standard, Fluency, Formal, Academic, Simple) for different writing contexts.",
+        "category": "paraphrasing",
+        "features": [
+            "Paraphrasing with multiple modes",
+            "Academic mode for scholarly writing",
+            "Sentence restructuring",
+            "Synonym suggestions",
+            "Summarizer tool",
+            "Grammar checker",
+        ],
+        "how_to_use": [
+            "1. Go to quillbot.com",
+            "2. Paste your text into the paraphraser",
+            "3. Select 'Academic' mode for research papers",
+            "4. Review paraphrased suggestions",
+            "5. Use the summarizer for literature review condensation",
+        ],
+        "integration_type": "external_link",
+        "free_tier": True,
+    },
+    "paperpal": {
+        "name": "Paperpal",
+        "url": "https://paperpal.com",
+        "description": "Academic writing assistant by Cactus Communications. Specialized for "
+                       "research paper writing with subject-specific suggestions and journal formatting.",
+        "category": "academic_writing",
+        "features": [
+            "Academic language enhancement",
+            "Subject-specific writing suggestions",
+            "Journal-specific formatting",
+            "Tone adjustment for academic writing",
+            "Translation support",
+            "Manuscript checks",
+        ],
+        "how_to_use": [
+            "1. Go to paperpal.com and sign up",
+            "2. Upload your manuscript or paste text",
+            "3. Select your subject area and target journal",
+            "4. Review AI-powered suggestions for academic improvement",
+            "5. Export the polished manuscript",
+        ],
+        "integration_type": "external_link",
+        "free_tier": True,
+    },
+}
+
+
+def get_writing_tools() -> dict:
+    """Get all writing tool integrations."""
+    return WRITING_TOOLS.copy()
+
+
+def get_writing_tool(tool_id: str) -> dict | None:
+    """Get a specific writing tool by ID."""
+    return WRITING_TOOLS.get(tool_id)
+
+
+# ---------------------------------------------------------------------------
+# Local Writing Analysis (no external API needed)
+# ---------------------------------------------------------------------------
+
+def analyze_writing(text: str) -> dict:
+    """
+    Perform local writing quality analysis on text.
+    Returns readability metrics, style assessment, and improvement suggestions.
+    """
+    if not text or len(text.strip()) < 10:
+        return {"error": "Text too short for analysis."}
+
+    # Basic counts
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    words = re.findall(r'\b[a-zA-Z]+\b', text)
+    syllables = sum(_count_syllables(word) for word in words)
+
+    num_sentences = len(sentences)
+    num_words = len(words)
+    num_syllables = syllables
+    num_chars = len(text)
+
+    if num_sentences == 0 or num_words == 0:
+        return {"error": "Unable to parse text."}
+
+    # Readability metrics
+    flesch_reading_ease = 206.835 - (1.015 * (num_words / num_sentences)) - (84.6 * (num_syllables / num_words))
+    flesch_grade_level = 0.39 * (num_words / num_sentences) + 11.8 * (num_syllables / num_words) - 15.59
+    gunning_fog = 0.4 * ((num_words / num_sentences) + _count_complex_words(words) * (100 / num_words))
+
+    # Passive voice detection (simplified)
+    passive_patterns = [
+        r'\b(?:is|are|was|were|be|been|being)\s+\w+ed\b',
+        r'\b(?:is|are|was|were|be|been|being)\s+being\s+\w+ed\b',
+    ]
+    passive_count = 0
+    for pattern in passive_patterns:
+        passive_count += len(re.findall(pattern, text, re.IGNORECASE))
+
+    # Sentence length analysis
+    sentence_lengths = [len(re.findall(r'\b[a-zA-Z]+\b', s)) for s in sentences]
+    avg_sentence_length = num_words / num_sentences
+    long_sentences = sum(1 for l in sentence_lengths if l > 25)
+    short_sentences = sum(1 for l in sentence_lengths if l < 10)
+
+    # Academic tone indicators
+    academic_words = [
+        'furthermore', 'moreover', 'nevertheless', 'consequently', 'subsequently',
+        'therefore', 'however', 'thus', 'hence', 'accordingly', 'specifically',
+        'particularly', 'notably', 'essentially', 'fundamentally', 'predominantly',
+        'systematically', 'comprehensive', 'empirical', 'methodology', 'theoretical',
+        'hypothesis', 'framework', 'analysis', 'significance', 'correlation',
+        'regression', 'variable', 'coefficient', 'robust', 'endogeneity',
+    ]
+    academic_word_count = sum(1 for w in words if w.lower() in academic_words)
+    academic_ratio = academic_word_count / num_words if num_words > 0 else 0
+
+    # Transition words
+    transitions = [
+        'however', 'therefore', 'moreover', 'furthermore', 'consequently',
+        'nevertheless', 'meanwhile', 'subsequently', 'in addition', 'for instance',
+        'for example', 'in contrast', 'on the other hand', 'as a result',
+        'in conclusion', 'firstly', 'secondly', 'finally', 'overall',
+    ]
+    transition_count = sum(1 for t in transitions if t in text.lower())
+
+    # Generate suggestions
+    suggestions = []
+
+    if avg_sentence_length > 25:
+        suggestions.append({
+            "type": "readability",
+            "message": f"Average sentence length is {avg_sentence_length:.1f} words. Consider breaking up long sentences for better readability.",
+            "severity": "medium",
+        })
+    elif avg_sentence_length < 10:
+        suggestions.append({
+            "type": "readability",
+            "message": f"Average sentence length is {avg_sentence_length:.1f} words. Consider combining short sentences for better flow.",
+            "severity": "low",
+        })
+
+    if passive_count > num_sentences * 0.3:
+        suggestions.append({
+            "type": "style",
+            "message": f"Found {passive_count} instances of passive voice. Consider using active voice for stronger, clearer writing.",
+            "severity": "medium",
+        })
+
+    if academic_ratio < 0.02:
+        suggestions.append({
+            "type": "tone",
+            "message": "Low use of academic vocabulary. Consider incorporating more scholarly terminology.",
+            "severity": "low",
+        })
+
+    if transition_count < num_sentences * 0.2:
+        suggestions.append({
+            "type": "structure",
+            "message": "Few transition words detected. Add transitions (however, therefore, moreover) to improve logical flow.",
+            "severity": "medium",
+        })
+
+    if flesch_reading_ease < 30:
+        suggestions.append({
+            "type": "readability",
+            "message": f"Flesch Reading Ease is {flesch_reading_ease:.1f} (very difficult). Consider simplifying language.",
+            "severity": "high",
+        })
+
+    if long_sentences > num_sentences * 0.3:
+        suggestions.append({
+            "type": "readability",
+            "message": f"{long_sentences} sentences exceed 25 words. Consider splitting them.",
+            "severity": "medium",
+        })
+
+    # Overall assessment
+    if flesch_reading_ease >= 60:
+        readability_label = "Good"
+    elif flesch_reading_ease >= 30:
+        readability_label = "Moderate"
+    else:
+        readability_label = "Needs improvement"
+
+    if academic_ratio >= 0.05:
+        tone_label = "Strongly academic"
+    elif academic_ratio >= 0.03:
+        tone_label = "Academic"
+    elif academic_ratio >= 0.01:
+        tone_label = "Somewhat academic"
+    else:
+        tone_label = "Needs more academic vocabulary"
+
+    return {
+        "word_count": num_words,
+        "sentence_count": num_sentences,
+        "avg_sentence_length": round(avg_sentence_length, 1),
+        "syllable_count": num_syllables,
+        "complex_word_count": _count_complex_words(words),
+        "passive_voice_count": passive_count,
+        "long_sentences": long_sentences,
+        "short_sentences": short_sentences,
+        "academic_word_count": academic_word_count,
+        "academic_ratio": round(academic_ratio * 100, 2),
+        "transition_count": transition_count,
+        "readability": {
+            "flesch_reading_ease": round(flesch_reading_ease, 1),
+            "flesch_grade_level": round(flesch_grade_level, 1),
+            "gunning_fog_index": round(gunning_fog, 1),
+            "label": readability_label,
+        },
+        "tone_assessment": tone_label,
+        "suggestions": suggestions,
+        "overall_score": _calculate_writing_score(
+            flesch_reading_ease, passive_count, num_sentences,
+            academic_ratio, transition_count, avg_sentence_length
+        ),
+    }
+
+
+def _count_syllables(word: str) -> int:
+    """Estimate syllable count for a word."""
+    word = word.lower()
+    if len(word) <= 3:
+        return 1
+    # Remove silent 'e'
+    if word.endswith('e'):
+        word = word[:-1]
+    # Count vowel groups
+    vowels = "aeiouy"
+    count = 0
+    prev_was_vowel = False
+    for char in word:
+        is_vowel = char in vowels
+        if is_vowel and not prev_was_vowel:
+            count += 1
+        prev_was_vowel = is_vowel
+    return max(count, 1)
+
+
+def _count_complex_words(words: list[str]) -> int:
+    """Count words with 3+ syllables (for Gunning Fog)."""
+    return sum(1 for w in words if _count_syllables(w) >= 3)
+
+
+def _calculate_writing_score(flesch: float, passive: int, sentences: int,
+                              academic_ratio: float, transitions: int,
+                              avg_length: float) -> int:
+    """Calculate an overall writing quality score (0-100)."""
+    score = 50  # Start at middle
+
+    # Readability (target: 30-60 for academic writing)
+    if 30 <= flesch <= 60:
+        score += 15
+    elif 20 <= flesch <= 70:
+        score += 10
+    else:
+        score -= 5
+
+    # Passive voice (lower is better)
+    if sentences > 0:
+        passive_ratio = passive / sentences
+        if passive_ratio < 0.15:
+            score += 10
+        elif passive_ratio < 0.3:
+            score += 5
+        else:
+            score -= 10
+
+    # Academic vocabulary
+    if academic_ratio >= 0.05:
+        score += 15
+    elif academic_ratio >= 0.03:
+        score += 10
+    elif academic_ratio >= 0.01:
+        score += 5
+
+    # Transitions
+    if sentences > 0:
+        trans_ratio = transitions / sentences
+        if trans_ratio >= 0.2:
+            score += 10
+        elif trans_ratio >= 0.1:
+            score += 5
+        else:
+            score -= 5
+
+    # Sentence length (ideal: 15-20 for academic)
+    if 15 <= avg_length <= 25:
+        score += 10
+    elif 10 <= avg_length <= 30:
+        score += 5
+    else:
+        score -= 5
+
+    return max(0, min(100, score))
+
+
+# ---------------------------------------------------------------------------
+# Writing Enhancement Suggestions
+# ---------------------------------------------------------------------------
+
+def enhance_for_journal(text: str, journal_name: str = None) -> dict:
+    """
+    Provide targeted suggestions for journal submission readiness.
+    """
+    analysis = analyze_writing(text)
+    if "error" in analysis:
+        return analysis
+
+    journal_specific = []
+
+    # Journal-specific checks
+    if journal_name:
+        journal_name_lower = journal_name.lower()
+        if "economic" in journal_name_lower:
+            journal_specific.extend([
+                "Ensure all economic terms are used correctly (e.g., 'endogeneity', 'causality')",
+                "Include robustness checks and mention them in the text",
+                "Use standard notation for regression equations",
+            ])
+        if "systems" in journal_name_lower:
+            journal_specific.extend([
+                "Emphasize systemic approaches and institutional frameworks",
+                "Consider cross-country comparative analysis",
+            ])
+
+    readiness_checks = [
+        {"check": "Word count adequate (>3000 for full papers)", "passed": analysis["word_count"] >= 3000},
+        {"check": "Readable sentence structure", "passed": 10 <= analysis["avg_sentence_length"] <= 25},
+        {"check": "Academic tone maintained", "passed": analysis["academic_ratio"] >= 0.02},
+        {"check": "Sufficient transitions for flow", "passed": analysis["transition_count"] >= analysis["sentence_count"] * 0.15},
+        {"check": "Low passive voice usage", "passed": analysis["passive_voice_count"] < analysis["sentence_count"] * 0.3},
+        {"check": "Readability within academic range", "passed": 20 <= analysis["readability"]["flesch_reading_ease"] <= 60},
+    ]
+
+    passed_count = sum(1 for c in readiness_checks if c["passed"])
+    total_checks = len(readiness_checks)
+    readiness_score = round((passed_count / total_checks) * 100)
+
+    return {
+        "analysis": analysis,
+        "readiness_checks": readiness_checks,
+        "readiness_score": readiness_score,
+        "ready_for_submission": readiness_score >= 70,
+        "journal_specific_suggestions": journal_specific,
+        "recommended_tools": _recommend_tools(analysis),
+    }
+
+
+def _recommend_tools(analysis: dict) -> list[dict]:
+    """Recommend writing tools based on analysis results."""
+    recommendations = []
+
+    # Always recommend Grammarly for grammar
+    recommendations.append({
+        "tool": "grammarly",
+        "reason": "Check grammar, spelling, and punctuation before submission",
+        "priority": "high",
+    })
+
+    # Recommend QuillBot for paraphrasing if passive voice is high
+    if analysis.get("passive_voice_count", 0) > 5:
+        recommendations.append({
+            "tool": "quillbot",
+            "reason": "Use Academic mode to reduce passive voice and improve sentence structure",
+            "priority": "medium",
+        })
+
+    # Recommend Paperpal for academic tone
+    if analysis.get("academic_ratio", 0) < 0.03:
+        recommendations.append({
+            "tool": "paperpal",
+            "reason": "Enhance academic vocabulary and subject-specific writing",
+            "priority": "high",
+        })
+
+    # Recommend QuillBot for long sentences
+    if analysis.get("avg_sentence_length", 0) > 25:
+        recommendations.append({
+            "tool": "quillbot",
+            "reason": "Use summarizer or paraphraser to break up long sentences",
+            "priority": "medium",
+        })
+
+    return recommendations
+
+
+# ---------------------------------------------------------------------------
+# Inline Text Enhancement Engine
+# Works directly on the platform — no external redirects needed.
+# Three modes modeled after Grammarly, QuillBot, and Paperpal.
+# ---------------------------------------------------------------------------
+
+# --- Grammarly-style: Grammar & Spelling Fixer ---
+
+# Common spelling corrections
+_SPELLING_FIXES = {
+    "recieve": "receive", "recieved": "received", "recieving": "receiving",
+    "seperate": "separate", "seperated": "separated", "seperately": "separately",
+    "definately": "definitely", "definatly": "definitely",
+    "occured": "occurred", "occuring": "occurring", "occurence": "occurrence",
+    "untill": "until", "wich": "which", "thier": "their", "thay": "they",
+    "teh": "the", "adn": "and", "nad": "and", "taht": "that",
+    "witht he": "with the", "tobe": "to be", "inthe": "in the",
+    "ofthe": "of the", "tothe": "to the", "onthe": "on the",
+    "forthe": "for the", "andthe": "and the", "isthe": "is the",
+    "achive": "achieve", "achived": "achieved", "achivement": "achievement",
+    "begining": "beginning", "belive": "believe", "calender": "calendar",
+    "cemetarey": "cemetery", "changable": "changeable", "collegue": "colleague",
+    "comming": "coming", "commitee": "committee", "completly": "completely",
+    "concious": "conscious", "curiousity": "curiosity", "dissapear": "disappear",
+    "dissapoint": "disappoint", "embarass": "embarrass", "enviroment": "environment",
+    "existance": "existence", "familar": "familiar", "finaly": "finally",
+    "flourescent": "fluorescent", "foriegn": "foreign", "freind": "friend",
+    "goverment": "government", "gramar": "grammar", "guarentee": "guarantee",
+    "happend": "happened", "harras": "harass", "heirarchy": "hierarchy",
+    "humourous": "humorous", "hygeine": "hygiene", "immediatly": "immediately",
+    "independant": "independent", "knowlege": "knowledge", "liason": "liaison",
+    "libary": "library", "licence": "license", "maintainance": "maintenance",
+    "managable": "manageable", "millenium": "millennium", "miniscule": "minuscule",
+    "mischievous": "mischievous", "noticable": "noticeable", "occassion": "occasion",
+    "persistant": "persistent", "posession": "possession", "prefered": "preferred",
+    "priviledge": "privilege", "probaly": "probably", "publically": "publicly",
+    "que": "queue", "readible": "readable", "realy": "really",
+    "recomend": "recommend", "relevent": "relevant", "religous": "religious",
+    "repetion": "repetition", "rythm": "rhythm", "secretery": "secretary",
+    "similiar": "similar", "sincerly": "sincerely", "speach": "speech",
+    "succesful": "successful", "suprise": "surprise", "tendancy": "tendency",
+    "tommorow": "tomorrow", "truely": "truly", "unfortunatly": "unfortunately",
+    "wether": "whether", "writting": "writing",
+}
+
+# Informal -> academic word replacements
+_ACADEMIC_UPGRADES = {
+    "get": "obtain", "gets": "obtains", "got": "obtained", "getting": "obtaining",
+    "show": "demonstrate", "shows": "demonstrates", "showed": "demonstrated",
+    "showing": "demonstrating", "shown": "demonstrated",
+    "use": "employ", "uses": "employs", "used": "employed", "using": "employing",
+    "make": "render", "makes": "renders", "made": "rendered", "making": "rendering",
+    "big": "substantial", "bigger": "more substantial", "biggest": "most substantial",
+    "small": "marginal", "smaller": "more marginal", "smallest": "most marginal",
+    "important": "significant", "really": "particularly",
+    "very": "notably", "a lot of": "numerous", "lots of": "numerous",
+    "kind of": "somewhat", "sort of": "somewhat",
+    "find out": "ascertain", "finds out": "ascertains", "found out": "ascertained",
+    "look at": "examine", "looks at": "examines", "looked at": "examined",
+    "look into": "investigate", "looks into": "investigates", "looked into": "investigated",
+    "think": "posit", "thinks": "posits", "thought": "posited",
+    "agree": "concur", "agrees": "concurs", "agreed": "concurred",
+    "start": "commence", "starts": "commences", "started": "commenced",
+    "end": "conclude", "ends": "concludes", "ended": "concluded",
+    "help": "facilitate", "helps": "facilitates", "helped": "facilitated",
+    "try": "attempt", "tries": "attempts", "tried": "attempted",
+    "change": "modification", "changes": "modifications", "changed": "modified",
+    "point out": "highlight", "points out": "highlights", "pointed out": "highlighted",
+    "come up with": "propose", "comes up with": "proposes", "came up with": "proposed",
+    "deal with": "address", "deals with": "addresses", "dealt with": "addressed",
+    "bring up": "raise", "brings up": "raises", "brought up": "raised",
+    "cut down": "reduce", "cuts down": "reduces", "cut down": "reduced",
+    "findings are": "findings indicate", "results are": "results indicate",
+}
+
+# Weak phrases -> stronger academic equivalents
+_WEAK_PHRASES = {
+    "i think": "it can be argued that",
+    "i believe": "the evidence suggests that",
+    "in my opinion": "from a scholarly perspective",
+    "this paper will look at": "this study examines",
+    "this paper looks at": "this study examines",
+    "this paper is about": "this study investigates",
+    "as everyone knows": "it is widely acknowledged that",
+    "everyone knows that": "it is well established that",
+    "people say that": "scholars contend that",
+    "many people think": "a consensus exists among scholars that",
+    "nowadays": "in recent years",
+    "in today's world": "in the contemporary context",
+    "since the beginning of time": "historically",
+    "throughout history": "historically",
+}
+
+
+def fix_grammar(text: str) -> dict:
+    """
+    Grammarly-style grammar and spelling fixer.
+    Detects and corrects common errors, returning the fixed text
+    along with a list of changes made.
+    """
+    if not text or len(text.strip()) < 5:
+        return {"original": text, "enhanced": text, "changes": [],
+                "summary": "Text too short for grammar analysis."}
+
+    original = text
+    changes = []
+
+    # 1. Fix double spaces
+    while "  " in text:
+        text = text.replace("  ", " ")
+        if "  " not in text:
+            changes.append({"type": "spacing", "original": "double space",
+                            "fixed": "single space", "category": "grammar"})
+
+    # 2. Fix missing space after punctuation
+    fixed_punct = re.sub(r'([,.!?;:])([A-Za-z])', r'\1 \2', text)
+    if fixed_punct != text:
+        changes.append({"type": "punctuation_spacing",
+                        "original": "missing space after punctuation",
+                        "fixed": "added space after punctuation", "category": "grammar"})
+        text = fixed_punct
+
+    # 3. Fix space before punctuation
+    fixed_pre_punct = re.sub(r'\s+([,.!?;:])', r'\1', text)
+    if fixed_pre_punct != text:
+        changes.append({"type": "punctuation_spacing",
+                        "original": "space before punctuation",
+                        "fixed": "removed space before punctuation", "category": "grammar"})
+        text = fixed_pre_punct
+
+    # 4. Capitalize first letter of each sentence
+    def _capitalize_sentence(match):
+        prefix = match.group(1)
+        first_char = match.group(2)
+        if first_char.islower():
+            return prefix + first_char.upper()
+        return match.group(0)
+
+    capitalized = re.sub(r'(^|[.!?]\s+)([a-z])', _capitalize_sentence, text)
+    if capitalized != text:
+        changes.append({"type": "capitalization",
+                        "original": "lowercase at sentence start",
+                        "fixed": "capitalized first letter", "category": "grammar"})
+        text = capitalized
+
+    # 5. Fix spelling errors (case-insensitive, preserve case)
+    words = re.findall(r'\b[A-Za-z]+\b', text)
+    for word in words:
+        lower = word.lower()
+        if lower in _SPELLING_FIXES:
+            correct = _SPELLING_FIXES[lower]
+            # Preserve capitalization
+            if word[0].isupper():
+                correct = correct[0].upper() + correct[1:]
+            pattern = r'\b' + re.escape(word) + r'\b'
+            new_text = re.sub(pattern, correct, text)
+            if new_text != text:
+                changes.append({"type": "spelling", "original": word,
+                                "fixed": correct, "category": "grammar"})
+                text = new_text
+
+    # 6. Fix "a" vs "an" before words
+    def _fix_article(match):
+        article = match.group(1)
+        word = match.group(2)
+        if not word:
+            return match.group(0)
+        first_letter = word[0].lower()
+        needs_an = first_letter in "aeiou"
+        # Check for silent h
+        if word.lower().startswith("hour") or word.lower().startswith("honest"):
+            needs_an = True
+        # Check for vowel sound with consonant (e.g., "university" -> "a")
+        if word.lower().startswith(("uni", "use", "eu", "one", "once")):
+            needs_an = False
+
+        correct_article = "an" if needs_an else "a"
+        if article.lower() == "a" and needs_an:
+            changes.append({"type": "article", "original": f"{article} {word}",
+                            "fixed": f"an {word}", "category": "grammar"})
+            return f"an {word}"
+        elif article.lower() == "an" and not needs_an:
+            changes.append({"type": "article", "original": f"{article} {word}",
+                            "fixed": f"a {word}", "category": "grammar"})
+            return f"a {word}"
+        return match.group(0)
+
+    # Apply article fixes (but avoid adding duplicate changes)
+    prev_changes = len(changes)
+    text = re.sub(r'\b([Aa])n?\s+([A-Za-z]+)', _fix_article, text)
+    # Deduplicate article changes
+    if len(changes) > prev_changes:
+        seen = set()
+        unique = []
+        for c in changes:
+            key = (c.get("original"), c.get("fixed"))
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
+        changes = unique
+
+    # 7. Fix repeated words (e.g., "the the")
+    repeated = re.sub(r'\b(\w+)(\s+\1\b)+', r'\1', text, flags=re.IGNORECASE)
+    if repeated != text:
+        changes.append({"type": "repetition", "original": "repeated word",
+                        "fixed": "removed duplicate", "category": "grammar"})
+        text = repeated
+
+    # 8. Ensure sentence ends with punctuation
+    stripped = text.rstrip()
+    if stripped and stripped[-1] not in '.!?:"\')':
+        text = stripped + "."
+        changes.append({"type": "punctuation", "original": "missing end punctuation",
+                        "fixed": "added period", "category": "grammar"})
+
+    # 9. Fix comma splice: "word,word" -> "word, word"
+    fixed_comma = re.sub(r',([A-Za-z])', r', \1', text)
+    if fixed_comma != text:
+        changes.append({"type": "punctuation_spacing",
+                        "original": "missing space after comma",
+                        "fixed": "added space after comma", "category": "grammar"})
+        text = fixed_comma
+
+    if text == original:
+        summary = "No grammar issues found. Your text looks clean."
+    else:
+        summary = f"Fixed {len(changes)} grammar issue(s)."
+
+    return {
+        "original": original,
+        "enhanced": text,
+        "changes": changes,
+        "summary": summary,
+    }
+
+
+def paraphrase_text(text: str) -> dict:
+    """
+    QuillBot-style paraphraser.
+    Rewrites sentences for clarity, converts passive to active voice,
+    and strengthens sentence structure.
+    """
+    if not text or len(text.strip()) < 20:
+        return {"original": text, "enhanced": text, "changes": [],
+                "summary": "Text too short for paraphrasing."}
+
+    original = text
+    changes = []
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    paraphrased_sentences = []
+
+    for sentence in sentences:
+        s = sentence.strip()
+        if not s:
+            paraphrased_sentences.append(s)
+            continue
+
+        original_s = s
+
+        # 1. Convert passive voice to active where possible
+        # Pattern: "X is/are/was/were verb-ed by Y" -> "Y verb-ed X"
+        passive_patterns = [
+            (r'\b([A-Za-z\s]+?)\s+(?:is|are|was|were)\s+(\w+ed)\s+by\s+([A-Za-z\s]+?)([.,;:])',
+             r'\3 \2 \1\4'),
+            (r'\b([A-Za-z\s]+?)\s+(?:is|are|was|were)\s+(\w+ed)\s+by\s+([A-Za-z\s]+)$',
+             r'\3 \2 \1'),
+        ]
+        for pattern, replacement in passive_patterns:
+            new_s = re.sub(pattern, replacement, s, flags=re.IGNORECASE)
+            if new_s != s:
+                changes.append({"type": "passive_to_active", "original": original_s,
+                                "fixed": new_s, "category": "paraphrase"})
+                s = new_s
+                break
+
+        # 2. Replace wordy phrases with concise alternatives
+        wordy_replacements = {
+            r'\bdue to the fact that\b': "because",
+            r'\bin spite of the fact that\b': "although",
+            r'\bin the event that\b': "if",
+            r'\bat this point in time\b': "currently",
+            r'\bin the process of\b': "during",
+            r'\bwith regard to\b': "regarding",
+            r'\bin order to\b': "to",
+            r'\bfor the purpose of\b': "for",
+            r'\bin the majority of cases\b': "usually",
+            r'\ba large number of\b': "many",
+            r'\ba small number of\b': "few",
+            r'\bthe majority of\b': "most",
+            r'\bhas the ability to\b': "can",
+            r'\bhas the capacity to\b': "can",
+            r'\bis able to\b': "can",
+            r'\bare able to\b': "can",
+            r'\bit is important to note that\b': "notably,",
+            r'\bit should be noted that\b': "notably,",
+            r'\bit is worth noting that\b': "notably,",
+            r'\bthere is a need to\b': "must",
+            r'\bthere is a tendency for\b': "tends to",
+            r'\bplays a role in\b': "contributes to",
+            r'\bplays an important role in\b': "significantly contributes to",
+            r'\bmake a decision\b': "decide",
+            r'\bmake a contribution\b': "contribute",
+            r'\bconduct an investigation\b': "investigate",
+            r'\bperform an analysis\b': "analyze",
+            r'\bcarry out a study\b': "study",
+        }
+        for pattern, replacement in wordy_replacements.items():
+            new_s = re.sub(pattern, replacement, s, flags=re.IGNORECASE)
+            if new_s != s:
+                if original_s not in [c.get("original") for c in changes if c["type"] == "passive_to_active"]:
+                    changes.append({"type": "conciseness", "original": original_s,
+                                    "fixed": new_s, "category": "paraphrase"})
+                s = new_s
+
+        # 3. Split overly long sentences (>30 words) at conjunctions
+        words_in_s = s.split()
+        if len(words_in_s) > 30:
+            # Try splitting at "and" or "but" or "however"
+            for conj in [r'\s+and\s+', r'\s+but\s+', r'\s+however,\s+', r'\s+therefore,\s+']:
+                parts = re.split(conj, s, maxsplit=1, flags=re.IGNORECASE)
+                if len(parts) == 2 and len(parts[0].split()) > 10 and len(parts[1].split()) > 10:
+                    conj_word = re.search(conj, s, re.IGNORECASE)
+                    if conj_word:
+                        actual_conj = conj_word.group(0).strip().rstrip(',')
+                        new_s = parts[0].strip() + ". " + actual_conj.capitalize() + " " + parts[1].strip()
+                        if not new_s.endswith('.'):
+                            new_s += '.'
+                        changes.append({"type": "sentence_split", "original": original_s,
+                                        "fixed": new_s, "category": "paraphrase"})
+                        s = new_s
+                        break
+
+        # 4. Vary sentence beginnings - replace "This study" overuse
+        if s.lower().startswith("this study") and sum(1 for ps in paraphrased_sentences if ps.lower().startswith("this study")) > 0:
+            alternatives = ["The present research", "The current investigation", "This analysis", "The present work"]
+            idx = len(paraphrased_sentences) % len(alternatives)
+            new_s = re.sub(r'^[Tt]his\s+study', alternatives[idx], s)
+            if new_s != s:
+                changes.append({"type": "sentence_variation", "original": original_s,
+                                "fixed": new_s, "category": "paraphrase"})
+                s = new_s
+
+        paraphrased_sentences.append(s)
+
+    enhanced = " ".join(paraphrased_sentences)
+
+    if enhanced == original:
+        summary = "No paraphrasing improvements needed. Your sentences are clear."
+    else:
+        summary = f"Made {len(changes)} paraphrasing improvement(s) for clarity and conciseness."
+
+    return {
+        "original": original,
+        "enhanced": enhanced,
+        "changes": changes,
+        "summary": summary,
+    }
+
+
+def enhance_academic(text: str) -> dict:
+    """
+    Paperpal-style academic tone enhancer.
+    Upgrades informal vocabulary to scholarly equivalents,
+    adds transition words, and strengthens academic register.
+    """
+    if not text or len(text.strip()) < 20:
+        return {"original": text, "enhanced": text, "changes": [],
+                "summary": "Text too short for academic enhancement."}
+
+    original = text
+    changes = []
+    enhanced = text
+
+    # 1. Replace weak/informal phrases with academic equivalents
+    for informal, academic in _WEAK_PHRASES.items():
+        pattern = re.compile(re.escape(informal), re.IGNORECASE)
+        if pattern.search(enhanced):
+            # Preserve capitalization of first letter
+            match = pattern.search(enhanced)
+            replacement = academic
+            if match.group(0)[0].isupper():
+                replacement = replacement[0].upper() + replacement[1:]
+            enhanced = pattern.sub(replacement, enhanced)
+            changes.append({"type": "phrase_upgrade", "original": informal,
+                            "fixed": academic, "category": "academic"})
+
+    # 2. Replace informal words with academic vocabulary
+    words = re.findall(r'\b[A-Za-z]+(?:\s+[A-Za-z]+)?\b', enhanced)
+    for word in words:
+        lower = word.lower()
+        if lower in _ACADEMIC_UPGRADES:
+            upgrade = _ACADEMIC_UPGRADES[lower]
+            # Preserve capitalization
+            if word[0].isupper():
+                upgrade = upgrade[0].upper() + upgrade[1:]
+            pattern = re.compile(r'\b' + re.escape(word) + r'\b', re.IGNORECASE)
+            new_enhanced = pattern.sub(upgrade, enhanced, count=1)
+            if new_enhanced != enhanced:
+                changes.append({"type": "vocabulary_upgrade", "original": word,
+                                "fixed": upgrade, "category": "academic"})
+                enhanced = new_enhanced
+
+    # 3. Add transition words between sentences where missing
+    sentences = re.split(r'(?<=[.!?])\s+', enhanced)
+    transitions_map = {
+        "contrast": ["However", "Nevertheless", "In contrast", "Conversely"],
+        "addition": ["Furthermore", "Moreover", "Additionally", "In addition"],
+        "causation": ["Consequently", "Therefore", "As a result", "Thus"],
+        "sequence": ["Subsequently", "Thereafter", "Following this", "Next"],
+    }
+
+    # Detect if consecutive sentences lack transitions
+    transition_indicators = set()
+    for vals in transitions_map.values():
+        transition_indicators.update(v.lower() for v in vals)
+    transition_indicators.update(["however", "therefore", "moreover", "furthermore",
+                                   "consequently", "additionally", "subsequently",
+                                   "thus", "hence", "nevertheless", "accordingly",
+                                   "in addition", "in contrast", "as a result"])
+
+    enhanced_sentences = []
+    for i, sentence in enumerate(sentences):
+        s = sentence.strip()
+        if not s:
+            enhanced_sentences.append(s)
+            continue
+
+        if i > 0:
+            first_word = s.split()[0].lower() if s.split() else ""
+            if first_word not in transition_indicators and not any(
+                s.lower().startswith(t) for t in transition_indicators
+            ):
+                # Add a transition based on position
+                category_idx = i % 4
+                category = list(transitions_map.keys())[category_idx]
+                transition = transitions_map[category][i % len(transitions_map[category])]
+                # Don't add transition to very short sentences or headings
+                if len(s.split()) > 5 and not s.startswith("#") and not s.startswith("**"):
+                    new_s = f"{transition}, {s[0].lower()}{s[1:]}"
+                    changes.append({"type": "transition_added", "original": s,
+                                    "fixed": new_s, "category": "academic"})
+                    s = new_s
+
+        enhanced_sentences.append(s)
+
+    enhanced = " ".join(enhanced_sentences)
+
+    # 4. Replace contractions with full forms
+    contractions = {
+        r"\bdon't\b": "do not", r"\bdoesn't\b": "does not",
+        r"\bdidn't\b": "did not", r"\bisn't\b": "is not",
+        r"\baren't\b": "are not", r"\bwasn't\b": "was not",
+        r"\bweren't\b": "were not", r"\bhaven't\b": "have not",
+        r"\bhasn't\b": "has not", r"\bhadn't\b": "had not",
+        r"\bwon't\b": "will not", r"\bwouldn't\b": "would not",
+        r"\bcan't\b": "cannot", r"\bcannot\b": "cannot",
+        r"\bcouldn't\b": "could not", r"\bshouldn't\b": "should not",
+        r"\bit's\b": "it is", r"\bthat's\b": "that is",
+        r"\bthere's\b": "there is", r"\bhere's\b": "here is",
+        r"\blet's\b": "let us", r"\bthey're\b": "they are",
+        r"\bwe're\b": "we are", r"\byou're\b": "you are",
+        r"\bI'm\b": "I am", r"\bwe've\b": "we have",
+        r"\bthey've\b": "they have", r"\bit've\b": "it has",
+        r"\bwe'll\b": "we will", r"\bthey'll\b": "they will",
+        r"\bI've\b": "I have", r"\bI'll\b": "I will",
+        r"\bI'd\b": "I would", r"\byou'd\b": "you would",
+    }
+    for pattern, replacement in contractions.items():
+        if re.search(pattern, enhanced, re.IGNORECASE):
+            new_enhanced = re.sub(pattern, replacement, enhanced, flags=re.IGNORECASE)
+            if new_enhanced != enhanced:
+                changes.append({"type": "contraction_fix",
+                                "original": "contraction",
+                                "fixed": "expanded form", "category": "academic"})
+                enhanced = new_enhanced
+
+    # 5. Replace "I" statements with more objective phrasing
+    first_person_fixes = {
+        r'\bI argue\b': "this study argues",
+        r'\bI argue that\b': "this study argues that",
+        r'\bI show\b': "this study demonstrates",
+        r'\bI show that\b': "this study demonstrates that",
+        r'\bI find\b': "the findings reveal",
+        r'\bI find that\b': "the findings reveal that",
+        r'\bI demonstrate\b': "this research demonstrates",
+        r'\bI demonstrate that\b': "this research demonstrates that",
+        r'\bI propose\b': "this study proposes",
+        r'\bI propose that\b': "this study proposes that",
+        r'\bI conclude\b': "this study concludes",
+        r'\bI conclude that\b': "this study concludes that",
+        r'\bI examine\b': "this study examines",
+        r'\bI analyze\b': "this analysis examines",
+        r'\bwe argue\b': "this study argues",
+        r'\bwe show\b': "this study demonstrates",
+        r'\bwe find\b': "the findings reveal",
+    }
+    for pattern, replacement in first_person_fixes.items():
+        if re.search(pattern, enhanced, re.IGNORECASE):
+            new_enhanced = re.sub(pattern, replacement, enhanced, flags=re.IGNORECASE)
+            if new_enhanced != enhanced:
+                changes.append({"type": "objectivity", "original": "first-person statement",
+                                "fixed": "objective phrasing", "category": "academic"})
+                enhanced = new_enhanced
+
+    if enhanced == original:
+        summary = "Your text already maintains a strong academic register."
+    else:
+        summary = f"Made {len(changes)} academic enhancement(s) to improve tone and register."
+
+    return {
+        "original": original,
+        "enhanced": enhanced,
+        "changes": changes,
+        "summary": summary,
+    }
+
+
+def enhance_text_all(text: str) -> dict:
+    """
+    Apply all three enhancement tools in sequence:
+    1. Grammar fix (Grammarly-style)
+    2. Paraphrase (QuillBot-style)
+    3. Academic enhancement (Paperpal-style)
+    Returns the fully enhanced text with all changes.
+    """
+    if not text or len(text.strip()) < 5:
+        return {"original": text, "enhanced": text, "all_changes": [],
+                "grammar": None, "paraphrase": None, "academic": None,
+                "summary": "Text too short for enhancement."}
+
+    # Step 1: Grammar fix
+    grammar_result = fix_grammar(text)
+    step1_text = grammar_result["enhanced"]
+
+    # Step 2: Paraphrase
+    paraphrase_result = paraphrase_text(step1_text)
+    step2_text = paraphrase_result["enhanced"]
+
+    # Step 3: Academic enhancement
+    academic_result = enhance_academic(step2_text)
+    final_text = academic_result["enhanced"]
+
+    all_changes = (
+        grammar_result.get("changes", []) +
+        paraphrase_result.get("changes", []) +
+        academic_result.get("changes", [])
+    )
+
+    total = len(all_changes)
+    summary = (
+        f"Applied {total} total enhancement(s): "
+        f"{len(grammar_result.get('changes', []))} grammar fix(es), "
+        f"{len(paraphrase_result.get('changes', []))} paraphrase improvement(s), "
+        f"{len(academic_result.get('changes', []))} academic enhancement(s)."
+    )
+
+    return {
+        "original": text,
+        "enhanced": final_text,
+        "all_changes": all_changes,
+        "grammar": grammar_result,
+        "paraphrase": paraphrase_result,
+        "academic": academic_result,
+        "summary": summary,
+    }

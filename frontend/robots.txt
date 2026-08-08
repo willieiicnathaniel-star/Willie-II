@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /THEeye
+Allow: /api/health
+Allow: /api/features
+
+Disallow: /api/auth/
+Disallow: /api/admin/
+Disallow: /api/search
+Disallow: /api/extract
+Disallow: /api/draft
+Disallow: /api/research/
+Disallow: /api/audit/
+
+Sitemap: https://theeye-research.onrender.com/sitemap.xml

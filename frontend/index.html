@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THEeye - AI-Assisted Research Platform</title>
+<meta name="google-site-verification" content="bPyTnQRmWRu_4ufXkTfMVPkNifg8YZxUhk28z1Lox-o" />
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ================================================================ -->
+<!-- AUTH SCREEN (Login / Register)                                    -->
+<!-- ================================================================ -->
+<div id="authScreen" class="auth-screen">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <span class="logo-icon">&#128065;</span>
+            <h1>THE<span class="logo-accent">eye</span></h1>
+        </div>
+        <p class="auth-subtitle">AI-Assisted Research Platform</p>
+        <p class="auth-tagline">Literature Discovery &middot; Data Extraction &middot; Drafting &middot; Integrity Audit</p>
+
+        <!-- Login Form -->
+        <div id="loginForm" class="auth-form active">
+            <h2>Welcome Back</h2>
+            <div class="auth-field">
+                <label for="loginEmail">Email</label>
+                <input type="email" id="loginEmail" placeholder="you@university.edu" autocomplete="email">
+            </div>
+            <div class="auth-field">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" placeholder="Your password" autocomplete="current-password">
+            </div>
+            <button id="loginBtn" class="btn-primary auth-submit">Login</button>
+            <div id="loginError" class="auth-error" style="display:none;"></div>
+            <p class="auth-switch">
+                Don't have an account? <a href="#" id="switchToRegister">Register here</a>
+            </p>
+            <div class="demo-info">
+                <p><strong>Demo:</strong> demo@theeye.local / demo123</p>
+                <p><strong>Admin:</strong> admin@theeye.local / admin123</p>
+            </div>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerForm" class="auth-form">
+            <h2>Create Account</h2>
+            <div class="auth-field">
+                <label for="regName">Full Name</label>
+                <input type="text" id="regName" placeholder="Jane Doe" autocomplete="name">
+            </div>
+            <div class="auth-field">
+                <label for="regEmail">Email</label>
+                <input type="email" id="regEmail" placeholder="you@university.edu" autocomplete="email">
+            </div>
+            <div class="auth-field">
+                <label for="regPassword">Password <span class="hint">(min 6 chars)</span></label>
+                <input type="password" id="regPassword" placeholder="Create a password" autocomplete="new-password">
+            </div>
+            <div class="auth-field">
+                <label for="regInstitution">Institution <span class="hint">(optional)</span></label>
+                <input type="text" id="regInstitution" placeholder="University of...">
+            </div>
+            <div class="auth-field">
+                <label for="regField">Research Field <span class="hint">(optional)</span></label>
+                <input type="text" id="regField" placeholder="Economics, Biology, etc.">
+            </div>
+            <button id="registerBtn" class="btn-primary auth-submit">Register</button>
+            <div id="registerError" class="auth-error" style="display:none;"></div>
+            <p class="auth-switch">
+                Already have an account? <a href="#" id="switchToLogin">Login here</a>
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- MAIN APPLICATION (hidden until logged in)                         -->
+<!-- ================================================================ -->
+<div id="mainApp" style="display:none;">
+
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <span class="logo-icon">&#128065;</span>
+                <h1>THE<span class="logo-accent">eye</span></h1>
+            </div>
+            <p class="tagline">AI-Assisted Research Platform &mdash; Literature Discovery, Data Extraction &amp; Drafting</p>
+        </div>
+        <div class="header-right">
+            <div class="integrity-badge" title="All AI-assisted content is tracked and disclosed">
+                <span class="badge-dot"></span> Integrity-Compliant
+            </div>
+            <div class="user-menu">
+                <div class="user-info">
+                    <span class="user-name" id="userName"></span>
+                    <span class="user-email" id="userEmail"></span>
+                </div>
+                <button id="logoutBtn" class="btn-logout">Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab active" data-tab="quickgen">&#9889; Academic Composer</button>
+        <button class="tab" data-tab="search">&#128269; Literature Discovery</button>
+        <button class="tab" data-tab="extract">&#128202; Data Extraction</button>
+        <button class="tab" data-tab="draft">&#9998; Drafting Assistant</button>
+        <button class="tab" data-tab="audit">&#128737; Provenance &amp; Audit</button>
+        <button class="tab" data-tab="analysis">&#128202; Data Analysis</button>
+        <button class="tab" data-tab="writing">&#9999; Writing Tools</button>
+        <button class="tab" data-tab="references">&#128218; References</button>
+        <button class="tab admin-only" data-tab="admin" style="display:none;">&#9881; Admin Panel</button>
+    </nav>
+
+    <main class="container">
+
+        <!-- ===================== ACADEMIC COMPOSER TAB ===================== -->
+        <section id="quickgen" class="tab-panel active">
+            <div class="panel-header">
+                <h2>Academic Composer</h2>
+                <p>Type your research prompt below. THEeye will search databases, extract data, and generate a cited draft &mdash; all in one step.</p>
+            </div>
+
+            <div class="quickgen-box">
+                <div class="quickgen-prompt-area">
+                    <label for="quickPrompt" class="prompt-label">
+                        &#9998; Type your prompt here:
+                    </label>
+                    <textarea id="quickPrompt" class="prompt-textarea" rows="4"
+                        placeholder="e.g., Write a literature review on FDI and economic growth in Africa&#10;&#10;Or just type your topic: FDI institutional quality economic growth Mano River Union"></textarea>
+                </div>
+
+                <div class="quickgen-options">
+                    <label class="filter-input">
+                        <span class="label-text">Section:</span>
+                        <select id="quickSectionType">
+                            <option value="literature_review">Literature Review</option>
+                            <option value="introduction">Introduction</option>
+                            <option value="abstract">Abstract</option>
+                            <option value="conclusion">Conclusion</option>
+                            <option value="summary">Summary</option>
+                        </select>
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Year from:</span>
+                        <input type="number" id="quickYearFrom" placeholder="2000" min="1970" max="2026">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Year to:</span>
+                        <input type="number" id="quickYearTo" placeholder="2026" min="1970" max="2026">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Max papers:</span>
+                        <input type="number" id="quickMaxResults" value="15" min="5" max="50">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Max words:</span>
+                        <input type="number" id="quickMaxWords" value="1000" min="200" max="3000">
+                    </label>
+                    <label class="checkbox-group">
+                        <span class="label-text">Quartiles:</span>
+                        <label><input type="checkbox" class="quick-q" value="Q1" checked> Q1</label>
+                        <label><input type="checkbox" class="quick-q" value="Q2" checked> Q2</label>
+                        <label><input type="checkbox" class="quick-q" value="Q3" checked> Q3</label>
+                    </label>
+                </div>
+
+                <button id="quickGenBtn" class="btn-primary btn-generate">
+                    &#9889; Generate Research Output
+                </button>
+            </div>
+
+            <div id="quickGenStatus" class="status-message" style="display:none;"></div>
+            <div id="quickGenResults" class="results-container"></div>
+        </section>
+
+        <!-- ===================== SEARCH TAB ===================== -->
+        <section id="search" class="tab-panel">
+            <div class="panel-header">
+                <h2>Literature Discovery</h2>
+                <p>Two tools in one tab: (1) search real academic databases for papers, and (2) verify whether your generated text follows proper academic format.</p>
+            </div>
+
+            <!-- Info banner explaining the two functions -->
+            <div class="section-info-banner">
+                <strong>&#8505; What this tab does:</strong>
+                <span><strong>Database Search</strong> &mdash; searches OpenAlex, Crossref, Semantic Scholar, Google Scholar, EconPapers/RePEc, and ERIC for real published papers, filtered by SJR quartile (Q1/Q2/Q3). Use this to find sources for your research.<br>
+                <strong>Academic Format Verification</strong> &mdash; paste your generated text (e.g., from Quick Generate) below to check whether it is written in proper academic format: readability, passive voice, academic tone, transition words, and more. You can also copy the text with one click.</span>
+            </div>
+
+            <div class="search-form">
+                <div class="form-row">
+                    <input type="text" id="searchQuery" placeholder="e.g., FDI institutional quality economic growth Africa" class="input-large">
+                    <button id="searchBtn" class="btn-primary">Search</button>
+                </div>
+                <div class="form-row form-filters">
+                    <label class="checkbox-group">
+                        <span class="label-text">Databases:</span>
+                        <label><input type="checkbox" class="search-db" value="openalex" checked> OpenAlex</label>
+                        <label><input type="checkbox" class="search-db" value="crossref" checked> Crossref</label>
+                        <label><input type="checkbox" class="search-db" value="semantic_scholar" checked> Semantic Scholar</label>
+                        <label><input type="checkbox" class="search-db" value="google_scholar" checked> Google Scholar</label>
+                        <label><input type="checkbox" class="search-db" value="econpapers" checked> EconPapers/RePEc</label>
+                        <label><input type="checkbox" class="search-db" value="eric" checked> ERIC</label>
+                    </label>
+                    <label class="checkbox-group">
+                        <span class="label-text">Quartiles:</span>
+                        <label><input type="checkbox" class="search-q" value="Q1" checked> Q1</label>
+                        <label><input type="checkbox" class="search-q" value="Q2" checked> Q2</label>
+                        <label><input type="checkbox" class="search-q" value="Q3" checked> Q3</label>
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Year from:</span>
+                        <input type="number" id="yearFrom" placeholder="2000" min="1970" max="2026">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Year to:</span>
+                        <input type="number" id="yearTo" placeholder="2026" min="1970" max="2026">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Min citations:</span>
+                        <input type="number" id="minCitations" placeholder="0" min="0">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Max results:</span>
+                        <input type="number" id="maxResults" value="25" min="1" max="50">
+                    </label>
+                </div>
+            </div>
+
+            <div id="searchStatus" class="status-message" style="display:none;"></div>
+            <div id="searchResults" class="results-container"></div>
+
+            <!-- ============ ACADEMIC FORMAT VERIFICATION ============ -->
+            <div class="section-divider"><span>Academic Format Verification</span></div>
+
+            <div class="verify-panel">
+                <div class="verify-panel-header">
+                    <span style="font-size:1.3rem;">&#128270;</span>
+                    <h3>Verify Academic Format</h3>
+                </div>
+                <p class="verify-panel-desc">Paste your generated text below (or click "Verify Academic Format" from the Quick Generate results to auto-fill). Then click "Check Academic Format" to see readability scores, tone assessment, and improvement suggestions.</p>
+
+                <div class="verify-info-banner">
+                    <strong>Tip:</strong>
+                    <span>After generating text in Quick Generate, click the <strong>&#128270; Verify Academic Format</strong> button &mdash; the text will be loaded here automatically. You can also manually paste any text you want to check.</span>
+                </div>
+
+                <textarea id="verifyTextInput" class="verify-textarea" rows="10"
+                    placeholder="Paste your generated academic text here for verification..."></textarea>
+
+                <div class="verify-actions">
+                    <button id="verifyFormatBtn" class="btn-primary">&#128270; Check Academic Format</button>
+                    <button id="verifyCopyBtn" class="btn-copy" style="background:var(--surface);color:var(--text);border:1px solid var(--border);">&#128203; Copy Text</button>
+                    <button id="verifyClearBtn" class="btn-secondary btn-sm">&#10006; Clear</button>
+                </div>
+            </div>
+
+            <div id="verifyStatus" class="status-message" style="display:none; margin-top:1rem;"></div>
+            <div id="verifyResults" class="results-container"></div>
+        </section>
+
+        <!-- ===================== EXTRACT TAB ===================== -->
+        <section id="extract" class="tab-panel">
+            <div class="panel-header">
+                <h2>Data Extraction</h2>
+                <p>Extract structured research data (methodology, sample, variables, findings) from papers. Select papers from your search results, or paste paper details below.</p>
+            </div>
+
+            <div id="extractPapersList" class="papers-selection">
+                <p class="placeholder-text">Run a search first, then select papers to extract data from. Selected papers will appear here.</p>
+            </div>
+
+            <div class="form-row">
+                <button id="extractBtn" class="btn-primary" disabled>Extract Data from Selected Papers</button>
+                <button id="extractAllBtn" class="btn-secondary">Extract from All Search Results</button>
+            </div>
+
+            <div id="extractStatus" class="status-message" style="display:none;"></div>
+            <div id="extractResults" class="results-container"></div>
+        </section>
+
+        <!-- ===================== DRAFT TAB ===================== -->
+        <section id="draft" class="tab-panel">
+            <div class="panel-header">
+                <h2>Drafting Assistant</h2>
+                <p>Generate academic draft sections grounded in your retrieved sources. All drafts include proper citations and an integrity disclaimer.</p>
+            </div>
+
+            <div class="draft-form">
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Section type:</span>
+                        <select id="sectionType">
+                            <option value="literature_review">Literature Review</option>
+                            <option value="introduction">Introduction</option>
+                            <option value="abstract">Abstract</option>
+                            <option value="conclusion">Conclusion</option>
+                            <option value="summary">Summary</option>
+                        </select>
+                    </label>
+                    <input type="text" id="draftTopic" placeholder="Research topic, e.g., FDI and economic growth in Mano River Union" class="input-large">
+                    <button id="draftBtn" class="btn-primary">Generate Draft</button>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Max words:</span>
+                        <input type="number" id="maxWords" value="1000" min="100" max="3000">
+                    </label>
+                </div>
+            </div>
+
+            <div id="draftStatus" class="status-message" style="display:none;"></div>
+
+            <div id="draftResults" class="results-container">
+                <p class="placeholder-text">Generated drafts will appear here. Drafts use papers from your latest search results.</p>
+            </div>
+        </section>
+
+        <!-- ===================== AUDIT TAB ===================== -->
+        <section id="audit" class="tab-panel">
+            <div class="panel-header">
+                <h2>Provenance &amp; Integrity Audit</h2>
+                <p>Track every action, source, and AI-assisted passage. Generate journal-compliant disclosure statements for your manuscript.</p>
+            </div>
+
+            <div class="form-row">
+                <button id="createSessionBtn" class="btn-primary">Create Audit Session</button>
+                <button id="refreshSessionsBtn" class="btn-secondary">Refresh Sessions</button>
+            </div>
+
+            <div id="auditStatus" class="status-message" style="display:none;"></div>
+
+            <div id="sessionsList" class="results-container">
+                <p class="placeholder-text">Create an audit session to start tracking your research provenance.</p>
+            </div>
+
+            <div id="auditReport" class="results-container"></div>
+        </section>
+
+        <!-- ===================== DATA ANALYSIS TAB ===================== -->
+        <section id="analysis" class="tab-panel">
+            <div class="panel-header">
+                <h2>Data Analysis</h2>
+                <p>Generate reproducible analysis code (R or Stata 18) for econometric methods. Define your variables and let THEeye produce ready-to-run scripts.</p>
+            </div>
+
+            <div class="analysis-form">
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Method:</span>
+                        <select id="analysisMethod">
+                            <option value="descriptive">Descriptive Statistics</option>
+                            <option value="correlation">Correlation</option>
+                            <option value="ols">OLS Regression</option>
+                            <option value="panel_fixed">Panel (Fixed Effects)</option>
+                            <option value="logistic">Logistic Regression</option>
+                            <option value="iv_2sls">IV / 2SLS</option>
+                            <option value="did">Difference-in-Differences</option>
+                            <option value="time_series">Time Series</option>
+                            <option value="robustness">Robustness Checks</option>
+                        </select>
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Language:</span>
+                        <select id="analysisLanguage">
+                            <option value="R">R</option>
+                            <option value="Stata 18">Stata 18</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Dependent variable:</span>
+                        <input type="text" id="analysisDepVar" placeholder="e.g., gdp_growth">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Independent variables:</span>
+                        <input type="text" id="analysisIndepVars" placeholder="comma-separated, e.g., fdi, trade_openness" style="min-width:240px;">
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Control variables:</span>
+                        <input type="text" id="analysisControlVars" placeholder="comma-separated, e.g., inflation, population" style="min-width:240px;">
+                    </label>
+                    <label class="filter-input">
+                        <span class="label-text">Data file name:</span>
+                        <input type="text" id="analysisDataFile" placeholder="e.g., panel_data.csv">
+                    </label>
+                </div>
+
+                <div class="analysis-advanced">
+                    <h4 class="advanced-toggle">&#9881; Advanced Options</h4>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Entity variable:</span>
+                            <input type="text" id="analysisEntityVar" placeholder="e.g., country_id">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Time variable:</span>
+                            <input type="text" id="analysisTimeVar" placeholder="e.g., year">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Cluster variable:</span>
+                            <input type="text" id="analysisClusterVar" placeholder="e.g., country_id">
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Instruments:</span>
+                            <input type="text" id="analysisInstruments" placeholder="comma-separated (for IV/2SLS)" style="min-width:240px;">
+                        </label>
+                        <label class="checkbox-group">
+                            <input type="checkbox" id="analysisRobustSE"> Robust standard errors
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <button id="generateAnalysisBtn" class="btn-primary">&#128202; Generate Analysis Code</button>
+                </div>
+            </div>
+
+            <div id="analysisStatus" class="status-message" style="display:none;"></div>
+
+            <div id="analysisCodeSection" class="code-section" style="display:none;">
+                <div class="code-header">
+                    <h4>Generated Code</h4>
+                    <button id="copyAnalysisCodeBtn" class="btn-secondary btn-copy">&#128203; Copy</button>
+                </div>
+                <pre id="analysisCodeOutput" class="code-output"></pre>
+            </div>
+
+            <div class="recommendations-section">
+                <div class="panel-header">
+                    <h3>Get Recommendations</h3>
+                    <p>Describe your research topic and data type to receive method and variable recommendations.</p>
+                </div>
+                <div class="form-row">
+                    <input type="text" id="recommendTopic" placeholder="e.g., FDI and economic growth in developing countries" class="input-large">
+                    <label class="filter-input">
+                        <span class="label-text">Data type:</span>
+                        <select id="recommendDataType">
+                            <option value="cross_section">Cross-section</option>
+                            <option value="time_series">Time Series</option>
+                            <option value="panel">Panel</option>
+                            <option value="binary">Binary / Choice</option>
+                        </select>
+                    </label>
+                    <button id="getRecommendationsBtn" class="btn-primary">Get Recommendations</button>
+                </div>
+                <div id="analysisRecommendations" class="results-container"></div>
+            </div>
+        </section>
+
+        <!-- ===================== WRITING TOOLS TAB ===================== -->
+        <section id="writing" class="tab-panel">
+            <div class="panel-header">
+                <h2>Writing Tools</h2>
+                <p>Fix grammar, paraphrase, and enhance academic tone &mdash; all directly on THEeye. No redirects, no external sites. Everything works right here.</p>
+            </div>
+
+            <!-- Inline Enhancement Editor -->
+            <div class="enhance-editor-panel">
+                <div class="enhance-toolbar">
+                    <div class="enhance-tool-btn" id="toolGrammarly">
+                        <span class="enhance-tool-icon">&#9999;</span>
+                        <div class="enhance-tool-info">
+                            <span class="enhance-tool-name">Fix Grammar</span>
+                            <span class="enhance-tool-desc">Spelling, punctuation, capitalization</span>
+                        </div>
+                    </div>
+                    <div class="enhance-tool-btn" id="toolQuillbot">
+                        <span class="enhance-tool-icon">&#128221;</span>
+                        <div class="enhance-tool-info">
+                            <span class="enhance-tool-name">Paraphrase</span>
+                            <span class="enhance-tool-desc">Clarity, conciseness, active voice</span>
+                        </div>
+                    </div>
+                    <div class="enhance-tool-btn" id="toolPaperpal">
+                        <span class="enhance-tool-icon">&#128208;</span>
+                        <div class="enhance-tool-info">
+                            <span class="enhance-tool-name">Enhance Academic</span>
+                            <span class="enhance-tool-desc">Vocabulary, tone, transitions</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="enhance-textarea-wrap">
+                    <textarea id="enhanceTextInput" class="enhance-textarea" rows="10"
+                        placeholder="Paste your text here, then click any tool above to fix issues directly on this platform..."></textarea>
+                </div>
+
+                <div class="enhance-actions">
+                    <button id="enhanceAllBtn" class="btn-primary btn-enhance-all">&#9889; Apply All Fixes</button>
+                    <button id="enhanceGrammarBtn" class="btn-secondary btn-sm">Fix Grammar Only</button>
+                    <button id="enhanceParaphraseBtn" class="btn-secondary btn-sm">Paraphrase Only</button>
+                    <button id="enhanceAcademicBtn" class="btn-secondary btn-sm">Enhance Academic Only</button>
+                    <button id="enhanceClearBtn" class="btn-secondary btn-sm">&#10006; Clear</button>
+                </div>
+            </div>
+
+            <div id="enhanceStatus" class="status-message" style="display:none;"></div>
+            <div id="enhanceResults" class="results-container"></div>
+
+            <!-- Text Analysis Section -->
+            <div class="section-divider"><span>Text Analysis &amp; Journal Readiness</span></div>
+
+            <div class="writing-analysis-form">
+                <div class="panel-header">
+                    <h3>Analyze Writing Quality</h3>
+                    <p>Paste your text below to check word count, readability, passive voice usage, and academic tone. Optionally enter a target journal to check submission readiness.</p>
+                </div>
+                <div class="form-row">
+                    <textarea id="writingTextInput" class="prompt-textarea" rows="6"
+                        placeholder="Paste your academic text here for analysis..."></textarea>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Target journal:</span>
+                        <input type="text" id="journalName" placeholder="e.g., Journal of Development Economics">
+                    </label>
+                    <button id="analyzeWritingBtn" class="btn-primary">Analyze Writing</button>
+                    <button id="checkJournalBtn" class="btn-secondary">Check Journal Readiness</button>
+                </div>
+            </div>
+
+            <div id="writingStatus" class="status-message" style="display:none;"></div>
+
+            <div id="writingAnalysisResults" class="results-container"></div>
+            <div id="journalReadinessResults" class="results-container"></div>
+        </section>
+
+        <!-- ===================== REFERENCES TAB ===================== -->
+        <section id="references" class="tab-panel">
+            <div class="panel-header">
+                <h2>References &amp; Citation Verification</h2>
+                <p>Verify your citations match your references, export to Mendeley/Zotero/NotePal, and format citations in any style &mdash; all on THEeye.</p>
+            </div>
+
+            <!-- ============ CITATION VERIFICATION SECTION ============ -->
+            <div class="section-divider"><span>Citation Verification</span></div>
+
+            <div class="verify-citations-panel">
+                <div class="panel-header">
+                    <h3>&#128270; Verify Citations Against References</h3>
+                    <p>Paste your text (e.g., from Quick Generate or Drafting Assistant) and your reference list below. THEeye will check every inline citation against the references and flag any mismatches, orphan citations, or uncited references.</p>
+                </div>
+
+                <div class="verify-cite-text-section">
+                    <label class="prompt-label">&#9998; Paste your cited text here:</label>
+                    <textarea id="verifyCiteText" class="prompt-textarea" rows="8"
+                        placeholder="Paste your literature review, introduction, or any text containing inline citations like (Smith et al., 2020) [1] or [2] here..."></textarea>
+                </div>
+
+                <div class="verify-cite-refs-section">
+                    <label class="prompt-label">&#128218; Reference list (one per line, numbered):</label>
+                    <textarea id="verifyCiteRefs" class="prompt-textarea" rows="6"
+                        placeholder="[1] Smith, J. et al. (2020). Title of paper. Journal Name. DOI: 10.xxxx&#10;[2] Jones, B. (2019). Another paper title. Another Journal.&#10;[3] Brown, A. &amp; Lee, C. (2018). Yet another title. Third Journal."></textarea>
+                    <div class="verify-cite-options">
+                        <button id="useSearchResultsBtn" class="btn-secondary btn-sm">Use Current Search Results as References</button>
+                        <span id="searchResultsCount" class="hint-text" style="margin-left:0.5rem;"></span>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <button id="verifyCitationsBtn" class="btn-primary">&#128270; Verify Citations</button>
+                    <button id="clearVerifyBtn" class="btn-secondary">&#10006; Clear</button>
+                </div>
+            </div>
+
+            <div id="verifyCiteStatus" class="status-message" style="display:none;"></div>
+            <div id="verifyCiteResults" class="results-container"></div>
+
+            <!-- ============ REFERENCE MANAGER TOOLS ============ -->
+            <div class="section-divider"><span>Reference Manager Integration</span></div>
+
+            <div class="tool-cards-grid">
+                <div class="tool-card">
+                    <div class="tool-card-header">
+                        <span class="tool-icon">&#128218;</span>
+                        <h4>Mendeley</h4>
+                    </div>
+                    <p class="tool-desc">Reference manager and academic social network.</p>
+                    <p class="tool-instruction"><strong>Import:</strong> Export BibTeX/RIS from THEeye below, then File &rarr; Import in Mendeley Desktop.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-card-header">
+                        <span class="tool-icon">&#128221;</span>
+                        <h4>Zotero</h4>
+                    </div>
+                    <p class="tool-desc">Free, open-source reference manager with browser integration.</p>
+                    <p class="tool-instruction"><strong>Import:</strong> Export BibTeX or CSL JSON from THEeye below, then File &rarr; Import in Zotero.</p>
+                </div>
+                <div class="tool-card">
+                    <div class="tool-card-header">
+                        <span class="tool-icon">&#128221;</span>
+                        <h4>NotePal</h4>
+                    </div>
+                    <p class="tool-desc">Note-taking and reference organization for researchers.</p>
+                    <p class="tool-instruction"><strong>Import:</strong> Export RIS from THEeye below and import into your NotePal library.</p>
+                </div>
+            </div>
+
+            <div class="references-export-form">
+                <div class="panel-header">
+                    <h3>Export References</h3>
+                    <p>Export your current search results (<span id="referencesPaperCount">0</span> papers available) in your preferred format for Mendeley, Zotero, or NotePal.</p>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Export format:</span>
+                        <select id="exportFormat">
+                            <option value="bibtex">BibTeX</option>
+                            <option value="ris">RIS</option>
+                            <option value="csl_json">CSL JSON</option>
+                            <option value="endnote_xml">EndNote XML</option>
+                            <option value="apa">APA</option>
+                            <option value="mla">MLA</option>
+                            <option value="chicago">Chicago</option>
+                            <option value="harvard">Harvard</option>
+                        </select>
+                    </label>
+                    <button id="exportReferencesBtn" class="btn-primary">Export References</button>
+                </div>
+            </div>
+
+            <div class="references-cite-form">
+                <div class="panel-header">
+                    <h3>Format Citations</h3>
+                    <p>Generate formatted in-text citations and reference lists from your search results.</p>
+                </div>
+                <div class="form-row">
+                    <label class="filter-input">
+                        <span class="label-text">Citation style:</span>
+                        <select id="citationFormat">
+                            <option value="apa">APA</option>
+                            <option value="mla">MLA</option>
+                            <option value="chicago">Chicago</option>
+                            <option value="harvard">Harvard</option>
+                        </select>
+                    </label>
+                    <button id="formatCitationsBtn" class="btn-primary">Format Citations</button>
+                </div>
+            </div>
+
+            <div id="referencesStatus" class="status-message" style="display:none;"></div>
+            <div id="referencesOutput" class="results-container"></div>
+        </section>
+
+        <!-- ===================== ADMIN PANEL TAB ===================== -->
+        <section id="admin" class="tab-panel admin-panel">
+            <div class="panel-header">
+                <h2>&#9881; Admin Panel</h2>
+                <p>Manage users, system configuration, content templates, and platform integrations. Admin access required.</p>
+            </div>
+
+            <div id="adminStatus" class="status-message" style="display:none;"></div>
+
+            <!-- User Management -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>User Management</h3>
+                    <button id="refreshAdminUsersBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminUsersTable" class="admin-table-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load users.</p>
+                </div>
+            </div>
+
+            <!-- System Config -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>System Configuration</h3>
+                    <button id="refreshAdminConfigBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminConfigForm" class="admin-form-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load configuration.</p>
+                </div>
+            </div>
+
+            <!-- Content Management -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>Content Management</h3>
+                    <button id="refreshAdminContentBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminContentForm" class="admin-form-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load content templates.</p>
+                </div>
+            </div>
+
+            <!-- Platform Stats -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>Platform Statistics</h3>
+                    <button id="refreshAdminStatsBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminStats" class="admin-stats-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load platform statistics.</p>
+                </div>
+            </div>
+
+            <!-- Database Sources -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>Database Sources</h3>
+                    <button id="refreshAdminDbSourcesBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminDbSources" class="admin-list-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load database sources.</p>
+                </div>
+            </div>
+
+            <!-- Tool Integrations -->
+            <div class="admin-subsection">
+                <div class="subsection-header">
+                    <h3>Tool Integrations</h3>
+                    <button id="refreshAdminToolsBtn" class="btn-secondary">Refresh</button>
+                </div>
+                <div id="adminTools" class="admin-list-wrapper">
+                    <p class="placeholder-text">Click "Refresh" to load tool integrations.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>THEeye v2.0 &mdash; AI assists, humans decide. All AI-generated content must be reviewed, verified, and disclosed per journal policy.</p>
+        <p class="footer-links">
+            <span>Powered by OpenAlex, Crossref &amp; Semantic Scholar APIs</span>
+            <span>|</span>
+            <span>Quartile data: SCImago SJR</span>
+        </p>
+    </footer>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
