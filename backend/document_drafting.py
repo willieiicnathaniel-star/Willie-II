@@ -637,7 +637,7 @@ async def _search_openalex_oa(query, max_results, client):
     """Search OpenAlex for open access works with PDF URLs."""
     params = {
         "search": query,
-        "per-page": min(max_results, 25),
+        "per-page": min(max_results * 3, 75),  # Request more since we filter for real PDF URLs
         "mailto": "research@theeye.local",
         "filter": "is_oa:true",
     }
@@ -651,10 +651,31 @@ async def _search_openalex_oa(query, max_results, client):
 
     articles = []
     for work in data.get("results", []):
+        # ---- Find a real PDF URL from all available locations ----
+        # OpenAlex provides multiple OA locations; we need an actual pdf_url, not a landing page
         best_oa = work.get("best_oa_location", {}) or {}
-        pdf_url = best_oa.get("pdf_url") or best_oa.get("landing_page_url")
+        pdf_url = best_oa.get("pdf_url")
+
+        # If best_oa_location has no pdf_url, check primary_location
+        if not pdf_url:
+            primary_loc = work.get("primary_location", {}) or {}
+            pdf_url = primary_loc.get("pdf_url")
+
+        # If still no pdf_url, check all locations array for one that has a pdf_url
+        if not pdf_url:
+            for loc in work.get("locations", []) or []:
+                loc_pdf = loc.get("pdf_url")
+                if loc_pdf:
+                    pdf_url = loc_pdf
+                    break
+
+        # If we still don't have a real PDF URL, skip this article
+        # (landing_page_url is an HTML page, not a downloadable PDF)
         if not pdf_url:
             continue
+
+        # landing_page_url is for the "Open in Browser" button (may be HTML)
+        landing_url = best_oa.get("landing_page_url") or pdf_url
 
         authors = []
         for auth in work.get("authorships", [])[:5]:
@@ -672,7 +693,7 @@ async def _search_openalex_oa(query, max_results, client):
             "cited_by_count": work.get("cited_by_count", 0),
             "is_open_access": True,
             "pdf_url": pdf_url,
-            "oa_url": best_oa.get("landing_page_url") or pdf_url,
+            "oa_url": landing_url,
             "source": "OpenAlex",
             "openalex_id": work.get("id", ""),
             "license": best_oa.get("license", ""),
@@ -739,28 +760,150 @@ def _reconstruct_abstract(inverted_index):
 
 
 async def download_pdf(url: str) -> tuple:
-    """Download a PDF from a URL and return (content, filename, content_type)."""
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True, headers={"User-Agent": "THEeye/2.0"}) as client:
+    """Download a PDF from a URL and return (content, filename, content_type).
+
+    Handles common issues with academic PDF hosts:
+      - Uses a browser-like User-Agent (many hosts block non-browser agents)
+      - Follows redirects
+      - Verifies the response is actually a PDF (not an HTML landing page)
+      - If an HTML page is returned, attempts to extract the real PDF link
+      - Retries with SSL verification disabled as a fallback
+    """
+    browser_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept": "application/pdf,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+
+    # ---- Attempt 1: Normal download with browser headers ----
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True, headers=browser_headers) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            content = resp.content
+            content_type = resp.headers.get("content-type", "").lower()
+
+            # Check if we got an actual PDF (by magic bytes and/or content-type)
+            is_pdf = content[:5] == b"%PDF-" or "application/pdf" in content_type
+
+            if is_pdf:
+                filename = _extract_filename(resp, url)
+                return content, filename, "application/pdf"
+
+            # If we got HTML, try to extract a PDF link from it
+            if "text/html" in content_type or content[:1] in (b"<", b"\n", b" "):
+                pdf_url = _extract_pdf_link_from_html(content.decode("utf-8", errors="ignore"), url)
+                if pdf_url and pdf_url != url:
+                    print(f"[download_pdf] Extracted PDF URL from HTML: {pdf_url}")
+                    # Recurse with the extracted URL
+                    return await download_pdf(pdf_url)
+
+            # Not a PDF and no link found — raise an informative error
+            raise ValueError(
+                f"The URL did not return a PDF (got {content_type or 'unknown type'}, "
+                f"{len(content)} bytes). The article may require direct browser access."
+            )
+
+    except httpx.HTTPStatusError:
+        raise
+    except httpx.ConnectError as e:
+        print(f"[download_pdf] Connection error: {e}. Retrying with SSL verification disabled.")
+    except httpx.HTTPError as e:
+        if "ssl" not in str(e).lower() and "certificate" not in str(e).lower():
+            raise
+        print(f"[download_pdf] SSL error: {e}. Retrying with SSL verification disabled.")
+
+    # ---- Attempt 2: Retry with SSL verification disabled ----
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True, headers=browser_headers, verify=False) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         content = resp.content
-        # Try to get filename from Content-Disposition header
-        cd = resp.headers.get("content-disposition", "")
-        filename = "article.pdf"
-        if cd:
-            match = re.search(r'filename="?([^"]+)"?', cd)
-            if match:
-                filename = match.group(1)
-        # If no filename from header, try to derive from URL
-        if filename == "article.pdf":
-            url_path = url.split("/")[-1]
-            if url_path and "." in url_path:
-                filename = url_path
-            else:
-                filename = "THEeye_article.pdf"
-        if not filename.endswith(".pdf"):
-            filename += ".pdf"
-        return content, filename, "application/pdf"
+        content_type = resp.headers.get("content-type", "").lower()
+
+        is_pdf = content[:5] == b"%PDF-" or "application/pdf" in content_type
+
+        if is_pdf:
+            filename = _extract_filename(resp, url)
+            return content, filename, "application/pdf"
+
+        if "text/html" in content_type:
+            pdf_url = _extract_pdf_link_from_html(content.decode("utf-8", errors="ignore"), url)
+            if pdf_url and pdf_url != url:
+                print(f"[download_pdf] Extracted PDF URL from HTML (SSL-disabled): {pdf_url}")
+                return await download_pdf(pdf_url)
+
+        raise ValueError(
+            f"The URL did not return a PDF (got {content_type or 'unknown type'}, "
+            f"{len(content)} bytes). The article may require direct browser access."
+        )
+
+
+def _extract_filename(resp, url: str) -> str:
+    """Extract a filename from response headers or URL."""
+    cd = resp.headers.get("content-disposition", "")
+    if cd:
+        match = re.search(r'filename\*?=["\']?(?:UTF-8\'\')?([^"\';\s]+)', cd, re.IGNORECASE)
+        if match:
+            filename = match.group(1).strip()
+            if filename:
+                if not filename.endswith(".pdf"):
+                    filename += ".pdf"
+                return filename
+    # Derive from URL
+    url_path = url.split("?")[0].split("/")[-1]
+    if url_path and "." in url_path:
+        if not url_path.endswith(".pdf"):
+            url_path += ".pdf"
+        return url_path
+    return "THEeye_article.pdf"
+
+
+def _extract_pdf_link_from_html(html: str, base_url: str) -> str | None:
+    """Try to find a direct PDF link from an HTML page.
+
+    Checks common patterns:
+      - <meta name="citation_pdf_url" content="...">
+      - <meta name="fulltext_pdf_url" content="...">
+      - <a href="*.pdf">
+      - og:url meta tag pointing to a PDF
+    """
+    # 1. citation_pdf_url meta tag (used by many journal systems)
+    match = re.search(r'<meta\s+name=["\']citation_pdf_url["\']\s+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+    if match:
+        return _resolve_url(match.group(1), base_url)
+
+    # 2. fulltext_pdf_url meta tag
+    match = re.search(r'<meta\s+name=["\']fulltext_pdf_url["\']\s+content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+    if match:
+        return _resolve_url(match.group(1), base_url)
+
+    # 3. Any anchor tag with .pdf href
+    pdf_matches = re.findall(r'<a\s+[^>]*href=["\']([^"\']+\.pdf[^"\']*)["\']', html, re.IGNORECASE)
+    if pdf_matches:
+        return _resolve_url(pdf_matches[0], base_url)
+
+    # 4. og:url meta tag
+    match = re.search(r'<meta\s+property=["\']og:url["\']\s+content=["\']([^"\']+\.pdf[^"\']*)["\']', html, re.IGNORECASE)
+    if match:
+        return _resolve_url(match.group(1), base_url)
+
+    return None
+
+
+def _resolve_url(url: str, base_url: str) -> str:
+    """Resolve a relative URL against a base URL."""
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/"):
+        # Get the origin from base_url
+        from urllib.parse import urlparse
+        parsed = urlparse(base_url)
+        return f"{parsed.scheme}://{parsed.netloc}{url}"
+    # Relative path
+    base_dir = base_url.rsplit("/", 1)[0]
+    return base_dir + "/" + url
 
 
 # ---------------------------------------------------------------------------

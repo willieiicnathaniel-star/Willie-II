@@ -3405,12 +3405,20 @@ function renderOAArticles(data) {
                 </div>
                 <div class="oa-article-abstract">${abstract}</div>
                 <div class="oa-article-actions">
-                    <button class="btn-primary btn-sm" onclick="downloadArticlePdf(${JSON.stringify(a.pdf_url).replace(/'/g, '&#39;')})">
-                        &#128190; Download PDF
-                    </button>
-                    <a href="${escapeHtml(a.oa_url || a.pdf_url)}" target="_blank" class="btn-secondary btn-sm">
-                        &#128279; Open in Browser
-                    </a>
+                    ${a.pdf_url
+                        ? `<button class="btn-primary btn-sm" onclick="downloadArticlePdf(this, ${JSON.stringify(a.pdf_url).replace(/'/g, '&#39;')})">
+                            &#128190; Download PDF
+                           </button>`
+                        : `<button class="btn-secondary btn-sm" disabled title="No direct PDF link available for this article">
+                            &#128190; PDF Unavailable
+                           </button>`
+                    }
+                    ${a.oa_url || a.pdf_url
+                        ? `<a href="${escapeHtml(a.oa_url || a.pdf_url)}" target="_blank" class="btn-secondary btn-sm">
+                            &#128279; Open in Browser
+                           </a>`
+                        : ''
+                    }
                     <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, ${JSON.stringify(a.title + ' | ' + authors + ' ' + yearStr + ' | ' + (a.doi || a.pdf_url)).replace(/'/g, '&#39;')})">
                         &#128203; Copy Citation
                     </button>
@@ -3423,32 +3431,161 @@ function renderOAArticles(data) {
 }
 
 
-async function downloadArticlePdf(url) {
+async function downloadArticlePdf(btn, url) {
+    if (!url) {
+        showOaToast('No PDF link is available for this article. Try "Open in Browser" instead.', 'error');
+        return;
+    }
+
+    // ---- Capture original button state for restore ----
+    const originalHtml = btn ? btn.innerHTML : '';
+    const originalDisabled = btn ? btn.disabled : false;
+
+    // ---- Show loading state on button ----
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Downloading...';
+    }
+
     try {
         const resp = await apiFetch('/api/drafting/download-pdf', {
             method: 'POST',
             body: JSON.stringify({ url }),
         });
+
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail || `HTTP ${resp.status}`);
+            throw new Error(err.detail || `Server returned HTTP ${resp.status}`);
         }
+
+        // ---- Verify the blob is actually a PDF ----
         const blob = await resp.blob();
+
+        // Check blob type / size — an HTML error page masquerading as a response
+        if (blob.size < 1000) {
+            throw new Error('The downloaded file is too small to be a valid PDF. The source may require direct browser access.');
+        }
+
+        // If the blob type is HTML, the backend likely couldn't get the real PDF
+        if (blob.type && blob.type.includes('text/html')) {
+            throw new Error('The source returned an HTML page instead of a PDF. Please try opening it directly in your browser.');
+        }
+
+        // ---- Trigger the download ----
         const downloadUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = downloadUrl;
-        // Try to get filename from Content-Disposition
+
+        // Extract filename from Content-Disposition header
         const cd = resp.headers.get('Content-Disposition') || '';
-        const match = cd.match(/filename="?([^"]+)"?/);
-        a.download = match ? match[1] : 'THEeye_article.pdf';
+        const match = cd.match(/filename\*?=["']?(?:UTF-8'')?([^"';\s]+)/i);
+        a.download = match ? decodeURIComponent(match[1]) : 'THEeye_article.pdf';
+
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(downloadUrl);
+
+        // ---- Success feedback ----
+        showOaToast('PDF downloaded successfully!', 'success');
+        if (btn) {
+            btn.innerHTML = '&#9989; Downloaded';
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = originalDisabled;
+            }, 2500);
+        }
+
     } catch (err) {
-        alert('PDF download failed: ' + err.message + '\n\nYou can try opening the URL directly in your browser.');
-        window.open(url, '_blank');
+        console.error('[downloadArticlePdf] Error:', err);
+
+        // ---- Restore button ----
+        if (btn) {
+            btn.innerHTML = '&#9888; Download Failed';
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = originalDisabled;
+            }, 3000);
+        }
+
+        // ---- Show user-friendly error with fallback option ----
+        const errorMsg = err.message || 'Unknown error occurred.';
+        showOaToast(
+            `PDF download failed: ${errorMsg} You can try opening the article directly in your browser.`,
+            'error',
+            () => window.open(url, '_blank')
+        );
     }
+}
+
+
+/**
+ * Show a toast notification for Open-Access articles tab.
+ * @param {string} message - The message to display
+ * @param {string} type - 'success', 'error', or 'info'
+ * @param {function} [actionCallback] - Optional callback for an action button
+ */
+function showOaToast(message, type, actionCallback) {
+    // Remove any existing toast
+    const existing = document.getElementById('oa-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'oa-toast';
+    toast.className = `oa-toast oa-toast-${type}`;
+
+    const colors = {
+        success: { bg: '#f0fff4', border: '#38a169', text: '#22543d', icon: '&#9989;' },
+        error:   { bg: '#fff5f5', border: '#e53e3e', text: '#742a2a', icon: '&#9888;' },
+        info:    { bg: '#ebf8ff', border: '#3182ce', text: '#2a4365', icon: '&#8505;' },
+    };
+    const c = colors[type] || colors.info;
+
+    toast.style.cssText = `
+        position: fixed; bottom: 24px; right: 24px; z-index: 10000;
+        background: ${c.bg}; border: 1px solid ${c.border}; border-left: 4px solid ${c.border};
+        color: ${c.text}; padding: 14px 18px; border-radius: 8px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1); max-width: 420px;
+        font-size: 0.875rem; line-height: 1.5; display: flex; gap: 10px;
+        align-items: flex-start; animation: oaToastIn 0.3s ease;
+    `;
+
+    toast.innerHTML = `
+        <span style="font-size: 1.1rem; flex-shrink: 0;">${c.icon}</span>
+        <div style="flex: 1;">
+            <div>${escapeHtml(message)}</div>
+            ${actionCallback ? '<button class="oa-toast-action" style="margin-top: 8px; padding: 4px 12px; background: ' + c.border + '; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Open in Browser</button>' : ''}
+        </div>
+        <button class="oa-toast-close" style="background: none; border: none; cursor: pointer; font-size: 1.2rem; color: ${c.text}; opacity: 0.5; padding: 0; line-height: 1;">&times;</button>
+    `;
+
+    document.body.appendChild(toast);
+
+    // Inject keyframe animation if not already present
+    if (!document.getElementById('oa-toast-style')) {
+        const style = document.createElement('style');
+        style.id = 'oa-toast-style';
+        style.textContent = '@keyframes oaToastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }';
+        document.head.appendChild(style);
+    }
+
+    // Wire up buttons
+    toast.querySelector('.oa-toast-close').onclick = () => toast.remove();
+    if (actionCallback) {
+        toast.querySelector('.oa-toast-action').onclick = () => {
+            toast.remove();
+            actionCallback();
+        };
+    }
+
+    // Auto-dismiss after 8 seconds (errors stay a bit longer)
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.style.transition = 'opacity 0.3s ease';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, type === 'error' ? 10000 : 5000);
 }
 
 
