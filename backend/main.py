@@ -1,4 +1,4 @@
-"""
+﻿"""
 THEeye - AI-Assisted Research Platform
 FastAPI Application Server with Authentication
 
@@ -68,6 +68,12 @@ from .writing_tools import (
     analyze_writing, enhance_for_journal,
     fix_grammar, paraphrase_text, enhance_academic, enhance_text_all,
 )
+
+from .data_analysis import (
+    parse_dataset, execute_analysis, extract_online_data,
+    suggest_econometric_model, generate_tool_code,
+)
+
 from .references import (
     get_reference_managers, get_reference_manager,
     get_export_formats, export_references, format_citations,
@@ -1225,3 +1231,74 @@ async def export_document_endpoint(request: DocumentExportRequest, user=Depends(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.main:app", host="0.0.0.0", port=80, reload=True)
+
+# ---------------------------------------------------------------------------
+# Data Analysis Endpoints (Advanced)
+# ---------------------------------------------------------------------------
+@app.post("/api/analysis/upload-dataset")
+async def api_upload_dataset(request: Request):
+    auth_check = _require_auth(request)
+    if auth_check: return auth_check
+    form = await request.form()
+    file = form.get("file")
+    if not file: raise HTTPException(status_code=400, detail="No file uploaded")
+    file_bytes = await file.read()
+    try:
+        result = parse_dataset(file_bytes, file.filename)
+        return {"status": "success", "dataset": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+@app.post("/api/analysis/run")
+async def api_run_analysis(request: Request):
+    auth_check = _require_auth(request)
+    if auth_check: return auth_check
+    body = await request.json()
+    instruction = body.get("instruction", "")
+    tool = body.get("tool", "python")
+    dataset_path = body.get("dataset_path", os.path.join(tempfile.gettempdir(), "theeye_current_dataset.csv"))
+    if not os.path.exists(dataset_path):
+        raise HTTPException(status_code=400, detail="No dataset uploaded.")
+    try:
+        result = execute_analysis(instruction, dataset_path, tool)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/analysis/online-data")
+async def api_online_data(request: Request):
+    auth_check = _require_auth(request)
+    if auth_check: return auth_check
+    body = await request.json()
+    try:
+        result = extract_online_data(body.get("source", "world_bank"), body.get("query", ""), body.get("params", {}))
+        return {"status": "success", "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/analysis/suggest-model")
+async def api_suggest_model(request: Request):
+    auth_check = _require_auth(request)
+    if auth_check: return auth_check
+    body = await request.json()
+    methodology = body.get("methodology", "")
+    if not methodology.strip():
+        raise HTTPException(status_code=400, detail="Please paste your methodology.")
+    try:
+        result = suggest_econometric_model(methodology)
+        return {"status": "success", "suggestion": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+@app.post("/api/analysis/generate-code")
+async def api_generate_code(request: Request):
+    auth_check = _require_auth(request)
+    if auth_check: return auth_check
+    body = await request.json()
+    tool = body.get("tool", "python")
+    method = body.get("method", "ols")
+    variables = body.get("variables", {})
+    try:
+        if tool in ("r", "rstudio"): code = generate_r_code(method, variables)
+        elif tool == "stata": code = generate_stata_code(method, variables)
+        else: code = generate_tool_code(tool, method, variables.get("independent", []), [])
+        return {"status": "success", "code": code}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
