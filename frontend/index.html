@@ -342,115 +342,254 @@
         <section id="analysis" class="tab-panel">
             <div class="panel-header">
                 <h2>Data Analysis</h2>
-                <p>Generate reproducible analysis code (R or Stata 18) for econometric methods. Define your variables and let THEeye produce ready-to-run scripts.</p>
+                <p>Upload your dataset, choose your analysis tool, give instructions, and get high-quality visual outputs. Extract data from World Bank, IMF &amp; more. Get econometric model suggestions.</p>
             </div>
 
-            <div class="analysis-form">
-                <div class="form-row">
-                    <label class="filter-input">
-                        <span class="label-text">Method:</span>
-                        <select id="analysisMethod">
-                            <option value="descriptive">Descriptive Statistics</option>
-                            <option value="correlation">Correlation</option>
-                            <option value="ols">OLS Regression</option>
-                            <option value="panel_fixed">Panel (Fixed Effects)</option>
-                            <option value="logistic">Logistic Regression</option>
-                            <option value="iv_2sls">IV / 2SLS</option>
-                            <option value="did">Difference-in-Differences</option>
-                            <option value="time_series">Time Series</option>
-                            <option value="robustness">Robustness Checks</option>
-                        </select>
-                    </label>
-                    <label class="filter-input">
-                        <span class="label-text">Language:</span>
-                        <select id="analysisLanguage">
-                            <option value="R">R</option>
-                            <option value="Stata 18">Stata 18</option>
-                        </select>
-                    </label>
-                </div>
-                <div class="form-row">
-                    <label class="filter-input">
-                        <span class="label-text">Dependent variable:</span>
-                        <input type="text" id="analysisDepVar" placeholder="e.g., gdp_growth">
-                    </label>
-                    <label class="filter-input">
-                        <span class="label-text">Independent variables:</span>
-                        <input type="text" id="analysisIndepVars" placeholder="comma-separated, e.g., fdi, trade_openness" style="min-width:240px;">
-                    </label>
-                </div>
-                <div class="form-row">
-                    <label class="filter-input">
-                        <span class="label-text">Control variables:</span>
-                        <input type="text" id="analysisControlVars" placeholder="comma-separated, e.g., inflation, population" style="min-width:240px;">
-                    </label>
-                    <label class="filter-input">
-                        <span class="label-text">Data file name:</span>
-                        <input type="text" id="analysisDataFile" placeholder="e.g., panel_data.csv">
-                    </label>
+            <!-- Sub-tab navigation -->
+            <div class="analysis-sub-tabs">
+                <button class="analysis-subtab active" data-subtab="Upload">&#128202; Upload &amp; Analyze</button>
+                <button class="analysis-subtab" data-subtab="Online">&#127760; Online Data Sources</button>
+                <button class="analysis-subtab" data-subtab="Model">&#129504; Model Suggestion</button>
+                <button class="analysis-subtab" data-subtab="Codegen">&#128187; Code Generation</button>
+            </div>
+
+            <!-- ============ UPLOAD & ANALYZE SUB-TAB ============ -->
+            <div id="analysisUpload" class="analysis-subpanel active">
+                <!-- Upload zone -->
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">&#128193;</div>
+                    <p><strong>Drop your dataset here</strong> or click to browse</p>
+                    <p style="font-size:0.85rem;color:#718096;">Supported: CSV, Excel (.xlsx/.xls), JSON, TSV</p>
+                    <input type="file" id="datasetFile" accept=".csv,.xlsx,.xls,.json,.tsv" style="display:none;">
                 </div>
 
-                <div class="analysis-advanced">
-                    <h4 class="advanced-toggle">&#9881; Advanced Options</h4>
+                <!-- Dataset preview (hidden until upload) -->
+                <div id="datasetPreview" class="dataset-preview" style="display:none;">
+                    <div class="dataset-info-bar">
+                        <div id="datasetInfo"></div>
+                        <button id="clearDatasetBtn" class="btn-secondary btn-sm">Remove</button>
+                    </div>
+                    <div id="datasetTable" class="dataset-table-wrapper"></div>
+                </div>
+
+                <!-- Analysis configuration -->
+                <div class="analysis-config">
                     <div class="form-row">
-                        <label class="filter-input">
-                            <span class="label-text">Entity variable:</span>
-                            <input type="text" id="analysisEntityVar" placeholder="e.g., country_id">
-                        </label>
-                        <label class="filter-input">
-                            <span class="label-text">Time variable:</span>
-                            <input type="text" id="analysisTimeVar" placeholder="e.g., year">
-                        </label>
-                        <label class="filter-input">
-                            <span class="label-text">Cluster variable:</span>
-                            <input type="text" id="analysisClusterVar" placeholder="e.g., country_id">
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Analysis instruction:</span>
+                            <textarea id="analysisInstruction" rows="3" placeholder="e.g., Run descriptive statistics and correlation analysis on all variables, then OLS regression with gdp_growth as dependent variable"></textarea>
                         </label>
                     </div>
                     <div class="form-row">
                         <label class="filter-input">
-                            <span class="label-text">Instruments:</span>
-                            <input type="text" id="analysisInstruments" placeholder="comma-separated (for IV/2SLS)" style="min-width:240px;">
+                            <span class="label-text">Analysis tool:</span>
+                            <select id="analysisTool">
+                                <option value="python">Python (pandas, statsmodels)</option>
+                                <option value="r">R</option>
+                                <option value="rstudio">RStudio</option>
+                                <option value="stata">Stata 18</option>
+                                <option value="eviews">EViews</option>
+                            </select>
                         </label>
-                        <label class="checkbox-group">
-                            <input type="checkbox" id="analysisRobustSE"> Robust standard errors
+                        <label class="filter-input">
+                            <span class="label-text">Output format:</span>
+                            <select id="plotFormat">
+                                <option value="png">PNG (300 DPI)</option>
+                                <option value="jpg">JPG (300 DPI)</option>
+                                <option value="svg">SVG (Vector)</option>
+                                <option value="pdf">PDF (Print)</option>
+                            </select>
                         </label>
+                        <button id="runAnalysisBtn" class="btn-primary" style="align-self:flex-end;">&#9654; Run Analysis</button>
+                    </div>
+
+                    <!-- Quick commands -->
+                    <div class="quick-commands">
+                        <span class="quick-label">Quick commands:</span>
+                        <button class="quick-cmd" data-cmd="descriptive statistics and summary">Descriptive Stats</button>
+                        <button class="quick-cmd" data-cmd="correlation analysis and heatmap">Correlation</button>
+                        <button class="quick-cmd" data-cmd="OLS regression">OLS Regression</button>
+                        <button class="quick-cmd" data-cmd="histogram and distribution analysis">Histograms</button>
+                        <button class="quick-cmd" data-cmd="scatter plot visualization">Scatter Plot</button>
+                        <button class="quick-cmd" data-cmd="time series trend analysis">Time Series</button>
+                        <button class="quick-cmd" data-cmd="bar chart for categorical variables">Bar Chart</button>
                     </div>
                 </div>
 
-                <div class="form-row">
-                    <button id="generateAnalysisBtn" class="btn-primary">&#128202; Generate Analysis Code</button>
-                </div>
+                <div id="analysisStatus" class="status-message" style="display:none;"></div>
+
+                <!-- Analysis results -->
+                <div id="analysisResults" class="analysis-results"></div>
             </div>
 
-            <div id="analysisStatus" class="status-message" style="display:none;"></div>
-
-            <div id="analysisCodeSection" class="code-section" style="display:none;">
-                <div class="code-header">
-                    <h4>Generated Code</h4>
-                    <button id="copyAnalysisCodeBtn" class="btn-secondary btn-copy">&#128203; Copy</button>
+            <!-- ============ ONLINE DATA SOURCES SUB-TAB ============ -->
+            <div id="analysisOnline" class="analysis-subpanel" style="display:none;">
+                <div class="analysis-form">
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Data source:</span>
+                            <select id="onlineSource">
+                                <option value="world_bank">World Bank DataBank</option>
+                                <option value="imf">IMF DataMapper</option>
+                                <option value="oecd">OECD Statistics</option>
+                                <option value="fred">FRED (St. Louis Fed)</option>
+                            </select>
+                        </label>
+                        <label class="filter-input" style="flex:2;">
+                            <span class="label-text">Indicator / Query:</span>
+                            <input type="text" id="onlineQuery" placeholder="e.g., NY.GDP.MKTP.CD (World Bank GDP indicator)">
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Country code:</span>
+                            <input type="text" id="onlineCountry" placeholder="e.g., USA, CHN, or 'all'">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Year from:</span>
+                            <input type="number" id="onlineYearFrom" placeholder="2000" min="1960" max="2026">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Year to:</span>
+                            <input type="number" id="onlineYearTo" placeholder="2024" min="1960" max="2026">
+                        </label>
+                        <button id="fetchOnlineBtn" class="btn-primary">&#127760; Fetch Data</button>
+                    </div>
+                    <div style="margin-top:0.5rem;font-size:0.85rem;color:#718096;">
+                        <strong>Tip:</strong> World Bank indicators use codes like <code>NY.GDP.MKTP.CD</code> (GDP), <code>BX.KLT.DINV.CD.WD</code> (FDI inflows), <code>NE.TRD.GNFS.ZS</code> (trade % of GDP). Browse indicators at <a href="https://data.worldbank.org/indicator" target="_blank">data.worldbank.org/indicator</a>.
+                    </div>
                 </div>
-                <pre id="analysisCodeOutput" class="code-output"></pre>
+                <div id="onlineStatus" class="status-message" style="display:none;"></div>
+                <div id="onlineResults" class="analysis-results"></div>
             </div>
 
-            <div class="recommendations-section">
-                <div class="panel-header">
-                    <h3>Get Recommendations</h3>
-                    <p>Describe your research topic and data type to receive method and variable recommendations.</p>
-                </div>
-                <div class="form-row">
-                    <input type="text" id="recommendTopic" placeholder="e.g., FDI and economic growth in developing countries" class="input-large">
-                    <label class="filter-input">
-                        <span class="label-text">Data type:</span>
-                        <select id="recommendDataType">
-                            <option value="cross_section">Cross-section</option>
-                            <option value="time_series">Time Series</option>
-                            <option value="panel">Panel</option>
-                            <option value="binary">Binary / Choice</option>
-                        </select>
+            <!-- ============ MODEL SUGGESTION SUB-TAB ============ -->
+            <div id="analysisModel" class="analysis-subpanel" style="display:none;">
+                <div class="analysis-form">
+                    <label class="filter-input" style="width:100%;">
+                        <span class="label-text">Paste your methodology / research design:</span>
+                        <textarea id="methodologyText" rows="8" placeholder="e.g., This study uses a panel data approach to examine the impact of FDI on economic growth across 15 African countries from 2000 to 2020. We employ fixed effects and random effects models, with a Hausman test for specification. We address endogeneity using instrumental variables (2SLS)..."></textarea>
                     </label>
-                    <button id="getRecommendationsBtn" class="btn-primary">Get Recommendations</button>
+                    <div class="form-row">
+                        <button id="suggestModelBtn" class="btn-primary">&#129504; Suggest Best Econometric Model</button>
+                    </div>
+                    <div style="margin-top:0.5rem;font-size:0.85rem;color:#718096;">
+                        THEeye analyzes your methodology text and recommends the most suitable econometric models with assumptions, software commands, and diagnostic tests.
+                    </div>
                 </div>
-                <div id="analysisRecommendations" class="results-container"></div>
+                <div id="modelStatus" class="status-message" style="display:none;"></div>
+                <div id="modelSuggestions" class="analysis-results"></div>
+            </div>
+
+            <!-- ============ CODE GENERATION SUB-TAB ============ -->
+            <div id="analysisCodegen" class="analysis-subpanel" style="display:none;">
+                <div class="analysis-form">
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Method:</span>
+                            <select id="analysisMethod">
+                                <option value="descriptive">Descriptive Statistics</option>
+                                <option value="correlation">Correlation</option>
+                                <option value="ols">OLS Regression</option>
+                                <option value="panel_fixed">Panel (Fixed Effects)</option>
+                                <option value="logistic">Logistic Regression</option>
+                                <option value="iv_2sls">IV / 2SLS</option>
+                                <option value="did">Difference-in-Differences</option>
+                                <option value="time_series">Time Series</option>
+                                <option value="robustness">Robustness Checks</option>
+                            </select>
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Language:</span>
+                            <select id="analysisLanguage">
+                                <option value="R">R</option>
+                                <option value="Stata 18">Stata 18</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Dependent variable:</span>
+                            <input type="text" id="analysisDepVar" placeholder="e.g., gdp_growth">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Independent variables:</span>
+                            <input type="text" id="analysisIndepVars" placeholder="comma-separated, e.g., fdi, trade_openness" style="min-width:240px;">
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label class="filter-input">
+                            <span class="label-text">Control variables:</span>
+                            <input type="text" id="analysisControlVars" placeholder="comma-separated, e.g., inflation, population" style="min-width:240px;">
+                        </label>
+                        <label class="filter-input">
+                            <span class="label-text">Data file name:</span>
+                            <input type="text" id="analysisDataFile" placeholder="e.g., panel_data.csv">
+                        </label>
+                    </div>
+
+                    <div class="analysis-advanced">
+                        <h4 class="advanced-toggle">&#9881; Advanced Options</h4>
+                        <div class="form-row">
+                            <label class="filter-input">
+                                <span class="label-text">Entity variable:</span>
+                                <input type="text" id="analysisEntityVar" placeholder="e.g., country_id">
+                            </label>
+                            <label class="filter-input">
+                                <span class="label-text">Time variable:</span>
+                                <input type="text" id="analysisTimeVar" placeholder="e.g., year">
+                            </label>
+                            <label class="filter-input">
+                                <span class="label-text">Cluster variable:</span>
+                                <input type="text" id="analysisClusterVar" placeholder="e.g., country_id">
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <label class="filter-input">
+                                <span class="label-text">Instruments:</span>
+                                <input type="text" id="analysisInstruments" placeholder="comma-separated (for IV/2SLS)" style="min-width:240px;">
+                            </label>
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="analysisRobustSE"> Robust standard errors
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <button id="generateAnalysisBtn" class="btn-primary">&#128202; Generate Analysis Code</button>
+                    </div>
+                </div>
+
+                <div id="codegenStatus" class="status-message" style="display:none;"></div>
+
+                <div id="analysisCodeSection" class="code-section" style="display:none;">
+                    <div class="code-header">
+                        <h4>Generated Code</h4>
+                        <button id="copyAnalysisCodeBtn" class="btn-secondary btn-copy">&#128203; Copy</button>
+                    </div>
+                    <pre id="analysisCodeOutput" class="code-output"></pre>
+                </div>
+
+                <div class="recommendations-section">
+                    <div class="panel-header">
+                        <h3>Get Recommendations</h3>
+                        <p>Describe your research topic and data type to receive method and variable recommendations.</p>
+                    </div>
+                    <div class="form-row">
+                        <input type="text" id="recommendTopic" placeholder="e.g., FDI and economic growth in developing countries" class="input-large">
+                        <label class="filter-input">
+                            <span class="label-text">Data type:</span>
+                            <select id="recommendDataType">
+                                <option value="cross_section">Cross-section</option>
+                                <option value="time_series">Time Series</option>
+                                <option value="panel">Panel</option>
+                                <option value="binary">Binary / Choice</option>
+                            </select>
+                        </label>
+                        <button id="getRecommendationsBtn" class="btn-primary">Get Recommendations</button>
+                    </div>
+                    <div id="analysisRecommendations" class="results-container"></div>
+                </div>
             </div>
         </section>
 

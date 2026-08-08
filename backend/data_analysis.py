@@ -235,6 +235,102 @@ def suggest_econometric_model(methodology):
     return {"primary_recommendation": suggestions[0], "all_suggestions": suggestions,
             "note": "Verify assumptions and test specifications before finalizing."}
 
+def generate_tool_code(tool, method, independent_vars, control_vars=None):
+    """Generate analysis code for a given tool and method.
+    Called from main.py /api/analysis/generate-code endpoint.
+    """
+    control_vars = control_vars or []
+    dep = independent_vars[0] if independent_vars else "y"
+    indep = independent_vars[1:] if len(independent_vars) > 1 else (independent_vars if independent_vars else ["x1"])
+    all_vars = indep + control_vars
+    indep_str = " + ".join(all_vars) if all_vars else "x"
+    tool = (tool or "python").lower()
+
+    if tool in ("r", "rstudio"):
+        return _gen_r_code(method, dep, indep, control_vars, all_vars, indep_str)
+    elif tool == "stata":
+        return _gen_stata_code(method, dep, indep, control_vars, all_vars, indep_str)
+    elif tool == "eviews":
+        return _gen_eviews_code(method, dep, indep, all_vars, indep_str)
+    return _gen_python_code(method, dep, indep, control_vars, all_vars, indep_str)
+
+
+def _gen_python_code(method, dep, indep, controls, all_vars, indep_str):
+    import_str = "import pandas as pd\nimport numpy as np\nimport statsmodels.api as sm\nimport matplotlib.pyplot as plt\nimport seaborn as sns\n\n"
+    load = "df = pd.read_csv('dataset.csv')\n\n"
+    if method == "descriptive":
+        return import_str + load + "print(df.describe())\ndf.hist(figsize=(12,8), bins=30)\nplt.tight_layout()\nplt.savefig('descriptive.png', dpi=300)\n"
+    if method == "correlation":
+        return import_str + load + "corr = df.corr()\nprint(corr)\nsns.heatmap(corr, annot=True, cmap='coolwarm', center=0)\nplt.title('Correlation Matrix')\nplt.tight_layout()\nplt.savefig('correlation.png', dpi=300)\n"
+    if method == "ols":
+        return import_str + load + f"X = sm.add_constant(df[{all_vars!r}])\ny = df['{dep}']\nmodel = sm.OLS(y, X).fit()\nprint(model.summary())\n"
+    if method in ("panel_fixed", "panel"):
+        return import_str + "from linearmodels import PanelOLS\n" + load + f"df = df.set_index(['entity', 'time'])\nmodel = PanelOLS(df['{dep}'], sm.add_constant(df[{all_vars!r}]), entity_effects=True)\nresult = model.fit()\nprint(result.summary())\n"
+    if method == "logistic":
+        return import_str + load + f"X = sm.add_constant(df[{all_vars!r}])\ny = df['{dep}']\nmodel = sm.Logit(y, X).fit()\nprint(model.summary())\nprint('Odds Ratios:', np.exp(model.params))\n"
+    if method in ("iv_2sls", "iv"):
+        return import_str + "from linearmodels import IV2SLS\n" + load + f"model = IV2SLS(df['{dep}'], sm.add_constant(df[{controls!r}]), df[{indep!r}], df[['z1']]).fit()\nprint(model.summary())\n"
+    if method == "did":
+        return import_str + load + f"df['treated_post'] = df['treated'] * df['post']\nX = sm.add_constant(df[['treated','post','treated_post']])\nmodel = sm.OLS(df['{dep}'], X).fit()\nprint(model.summary())\n"
+    if method == "time_series":
+        return import_str + "from statsmodels.tsa.arima.model import ARIMA\n" + load + f"model = ARIMA(df['{dep}'], order=(1,1,1)).fit()\nprint(model.summary())\nforecast = model.forecast(steps=12)\nprint('Forecast:', forecast)\n"
+    return import_str + load + f"X = sm.add_constant(df[{all_vars!r}])\ny = df['{dep}']\nmodel = sm.OLS(y, X).fit()\nprint(model.summary())\n"
+
+
+def _gen_r_code(method, dep, indep, controls, all_vars, indep_str):
+    header = "library(tidyverse)\nlibrary(stargazer)\nlibrary(sandwich)\nlibrary(lmtest)\n\n"
+    load = "data <- read.csv('dataset.csv')\n\n"
+    if method == "descriptive":
+        return header + load + "summary(data)\ncor(data)\n"
+    if method == "correlation":
+        return header + "library(corrplot)\n" + load + "corr <- cor(data, use='complete.obs')\nprint(corr)\ncorrplot(corr, method='color', type='upper')\n"
+    if method == "ols":
+        return header + load + f"model <- lm({dep} ~ {indep_str}, data=data)\nsummary(model)\ncoeftest(model, vcov=vcovHC(model, type='HC1'))\nstargazer(model, type='text')\n"
+    if method in ("panel_fixed", "panel"):
+        return header + "library(plm)\n" + load + f"pdata <- pdata.frame(data, index=c('entity','time'))\nfe <- plm({dep} ~ {indep_str}, data=pdata, model='within')\nre <- plm({dep} ~ {indep_str}, data=pdata, model='random')\nsummary(fe)\nphtest(fe, re)\n"
+    if method == "logistic":
+        return header + load + f"logit <- glm({dep} ~ {indep_str}, data=data, family=binomial)\nsummary(logit)\nexp(coef(logit))\n"
+    if method in ("iv_2sls", "iv"):
+        return header + "library(AER)\n" + load + f"iv <- ivreg({dep} ~ {indep_str} | z1, data=data)\nsummary(iv, diagnostics=TRUE)\n"
+    if method == "did":
+        return header + "library(fixest)\n" + load + f"did <- feols({dep} ~ treated:post | entity + time, data=data)\nsummary(did)\n"
+    if method == "time_series":
+        return header + "library(forecast)\n" + load + f"ts_data <- ts(data${dep}, frequency=12)\nmodel <- auto.arima(ts_data)\nsummary(model)\nforecast(model, h=12)\n"
+    return header + load + f"model <- lm({dep} ~ {indep_str}, data=data)\nsummary(model)\n"
+
+
+def _gen_stata_code(method, dep, indep, controls, all_vars, indep_str):
+    load = "use 'dataset.dta', clear\n\n"
+    if method == "descriptive":
+        return "* Stata 18\n" + load + "summarize\n"
+    if method == "correlation":
+        return "* Stata 18\n" + load + f"pwcorr {dep} {' '.join(all_vars)}, sig\n"
+    if method == "ols":
+        return "* Stata 18\n" + load + f"regress {dep} {' '.join(all_vars)}, robust\nestat vif\nrvfplot\n"
+    if method in ("panel_fixed", "panel"):
+        return "* Stata 18\n" + load + f"xtset entity time\nxtreg {dep} {' '.join(all_vars)}, fe\nxtreg {dep} {' '.join(all_vars)}, re\nhausman fe re\n"
+    if method == "logistic":
+        return "* Stata 18\n" + load + f"logit {dep} {' '.join(all_vars)}, robust\nmargins, dydx(*)\n"
+    if method in ("iv_2sls", "iv"):
+        return "* Stata 18\n" + load + f"ivregress 2sls {dep} ({indep[0] if indep else 'x'} = z1) {' '.join(controls)}, robust\nestat endogenous\nestat firststage\n"
+    if method == "did":
+        return "* Stata 18\n" + load + f"gen treated_post = treated * post\nregress {dep} treated post treated_post, robust\n"
+    if method == "time_series":
+        return "* Stata 18\n" + load + f"tsset time\narima {dep}, arima(1,1,1)\nforecast\n"
+    return "* Stata 18\n" + load + f"regress {dep} {' '.join(all_vars)}, robust\n"
+
+
+def _gen_eviews_code(method, dep, indep, all_vars, indep_str):
+    load = "import 'dataset.csv'\n\n"
+    if method == "ols":
+        return "' EViews\n" + load + f"equation eq1.ls {dep} c {' '.join(all_vars)}\nshow eq1\n"
+    if method == "logistic":
+        return "' EViews\n" + load + f"binary b1.ls {dep} c {' '.join(all_vars)}\nshow b1\n"
+    if method == "time_series":
+        return "' EViews\n" + load + f"equation ts1.ls {dep} ar(1) ma(1)\nshow ts1\n"
+    return "' EViews\n" + load + f"equation eq1.ls {dep} c {' '.join(all_vars)}\nshow eq1\n"
+
+
 def _fig_b64(fig, fmt="png"):
     buf = io.BytesIO()
     fig.savefig(buf, format=fmt, dpi=300, bbox_inches="tight", facecolor="white")

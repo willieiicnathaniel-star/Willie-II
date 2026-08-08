@@ -1293,6 +1293,390 @@ window.loadAuditReport = loadAuditReport;
 // DATA ANALYSIS
 // ===========================================================================
 
+let currentDatasetPath = '';
+let currentDatasetInfo = null;
+
+// ---- Sub-tab switching ----
+document.querySelectorAll('.analysis-subtab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.analysis-subtab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const target = btn.dataset.subtab;
+        document.querySelectorAll('.analysis-subpanel').forEach(p => {
+            p.classList.remove('active');
+            p.style.display = 'none';
+        });
+        const panel = document.getElementById('analysis' + target);
+        if (panel) { panel.classList.add('active'); panel.style.display = 'block'; }
+    });
+});
+
+// ---- Upload zone ----
+const uploadZone = document.getElementById('uploadZone');
+const datasetFile = document.getElementById('datasetFile');
+
+if (uploadZone) {
+    uploadZone.addEventListener('click', () => datasetFile.click());
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadZone.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) {
+            datasetFile.files = e.dataTransfer.files;
+            uploadDataset(e.dataTransfer.files[0]);
+        }
+    });
+}
+
+if (datasetFile) {
+    datasetFile.addEventListener('change', e => {
+        if (e.target.files.length > 0) uploadDataset(e.target.files[0]);
+    });
+}
+
+document.getElementById('clearDatasetBtn')?.addEventListener('click', clearDataset);
+
+async function uploadDataset(file) {
+    showStatus('analysisStatus', `Uploading ${file.name}...`, 'loading');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+        const r = await apiFetch('/api/analysis/upload-dataset', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || 'Upload failed');
+        currentDatasetInfo = d.dataset;
+        currentDatasetPath = d.dataset._temp_path || '';
+        renderDatasetPreview(d.dataset);
+        hideStatus('analysisStatus');
+        showStatus('analysisStatus', `Dataset loaded: ${d.dataset.n_rows} rows, ${d.dataset.n_cols} columns.`, 'success');
+    } catch (err) {
+        showStatus('analysisStatus', `Upload error: ${err.message}`, 'error');
+    }
+}
+
+function renderDatasetPreview(ds) {
+    const prev = document.getElementById('datasetPreview');
+    const info = document.getElementById('datasetInfo');
+    const tbl = document.getElementById('datasetTable');
+    prev.style.display = 'block';
+
+    const missingCount = Object.keys(ds.missing_values || {}).length;
+    info.innerHTML = `<strong>${ds.n_rows} rows</strong> &times; <strong>${ds.n_cols} columns</strong>` +
+        (missingCount > 0 ? ` &nbsp;|&nbsp; <span style="color:#e53e3e;">${missingCount} columns with missing values</span>` : '');
+
+    if (ds.head && ds.head.length > 0) {
+        const cols = Object.keys(ds.head[0]);
+        let html = '<table class="data-table"><thead><tr>';
+        cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+        html += '</tr></thead><tbody>';
+        ds.head.forEach(row => {
+            html += '<tr>';
+            cols.forEach(c => {
+                const v = row[c];
+                html += `<td>${v === null || v === undefined || v === 'N/A' ? '<span style="color:#cbd5e0;">N/A</span>' : escapeHtml(String(v).substring(0, 50))}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        tbl.innerHTML = html;
+    }
+
+    // Populate column info below table
+    if (ds.dtypes) {
+        let dtypeHtml = '<div style="margin-top:0.5rem;font-size:0.8rem;color:#718096;">';
+        Object.entries(ds.dtypes).forEach(([col, dt]) => {
+            const color = dt.includes('int') || dt.includes('float') ? '#3182ce' : '#805ad5';
+            dtypeHtml += `<span style="margin-right:0.75rem;"><span style="color:${color};">${escapeHtml(col)}</span> (${dt})</span>`;
+        });
+        dtypeHtml += '</div>';
+        tbl.innerHTML += dtypeHtml;
+    }
+}
+
+function clearDataset() {
+    currentDatasetPath = '';
+    currentDatasetInfo = null;
+    document.getElementById('datasetPreview').style.display = 'none';
+    document.getElementById('datasetFile').value = '';
+    document.getElementById('analysisResults').innerHTML = '';
+    hideStatus('analysisStatus');
+}
+
+// ---- Quick commands ----
+document.querySelectorAll('.quick-cmd').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.getElementById('analysisInstruction').value = btn.dataset.cmd;
+        document.getElementById('analysisInstruction').focus();
+    });
+});
+
+// ---- Run analysis ----
+document.getElementById('runAnalysisBtn')?.addEventListener('click', async () => {
+    const inst = document.getElementById('analysisInstruction').value.trim();
+    if (!inst) { showStatus('analysisStatus', 'Type an analysis instruction first.', 'error'); return; }
+    if (!currentDatasetPath) { showStatus('analysisStatus', 'Please upload a dataset first.', 'error'); return; }
+
+    const btn = document.getElementById('runAnalysisBtn');
+    const tool = document.getElementById('analysisTool').value;
+    const fmt = document.getElementById('plotFormat').value;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Running...';
+    showStatus('analysisStatus', 'Executing analysis...', 'loading');
+
+    try {
+        const r = await apiFetch('/api/analysis/run', {
+            method: 'POST',
+            body: JSON.stringify({ instruction: inst, tool, dataset_path: currentDatasetPath })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || 'Analysis failed');
+        hideStatus('analysisStatus');
+        renderAnalysisResults(d.result, fmt);
+        showStatus('analysisStatus', 'Analysis complete.', 'success');
+    } catch (err) {
+        showStatus('analysisStatus', `Error: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#9654; Run Analysis';
+    }
+});
+
+function renderAnalysisResults(result, format) {
+    const container = document.getElementById('analysisResults');
+    let html = '';
+
+    // Text output
+    if (result.text_output && result.text_output.trim()) {
+        html += `<div class="result-card"><div class="result-card-header"><h4>&#128221; Text Output</h4></div><pre class="result-text">${escapeHtml(result.text_output.trim())}</pre></div>`;
+    }
+
+    // Plots
+    if (result.plots && result.plots.length > 0) {
+        html += '<div class="result-card"><div class="result-card-header"><h4>&#128250; Visualizations</h4></div><div class="plots-grid">';
+        result.plots.forEach((plot, i) => {
+            const mime = format === 'jpg' ? 'image/jpeg' : format === 'svg' ? 'image/svg+xml' : format === 'pdf' ? 'application/pdf' : 'image/png';
+            html += `<div class="plot-item">
+                <div class="plot-title">${escapeHtml(plot.title)}</div>
+                <img src="data:${mime};base64,${plot.image}" alt="${escapeHtml(plot.title)}" class="plot-img" />
+                <button class="btn-secondary btn-sm download-plot" data-b64="${plot.image}" data-title="${escapeHtml(plot.title)}" data-fmt="${format}">&#11015; Download ${format.toUpperCase()}</button>
+            </div>`;
+        });
+        html += '</div></div>';
+    }
+
+    // Tables
+    if (result.tables && result.tables.length > 0) {
+        result.tables.forEach(tbl => {
+            html += `<div class="result-card"><div class="result-card-header"><h4>&#128202; ${escapeHtml(tbl.title)}</h4></div>`;
+            const data = tbl.data;
+            if (data && typeof data === 'object') {
+                // Check if it's a dict of dicts (like describe output) or key-value
+                const keys = Object.keys(data);
+                if (keys.length > 0 && typeof data[keys[0]] === 'object') {
+                    // Dict of dicts - render as table
+                    const subKeys = Object.keys(data[keys[0]]);
+                    html += '<table class="data-table"><thead><tr><th></th>';
+                    subKeys.forEach(sk => html += `<th>${escapeHtml(sk)}</th>`);
+                    html += '</tr></thead><tbody>';
+                    keys.forEach(k => {
+                        html += `<tr><td><strong>${escapeHtml(k)}</strong></td>`;
+                        subKeys.forEach(sk => {
+                            const v = data[k][sk];
+                            html += `<td>${v !== null && v !== undefined ? (typeof v === 'number' ? v.toFixed(4) : escapeHtml(String(v))) : ''}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table>';
+                } else {
+                    // Key-value pairs
+                    html += '<table class="data-table"><tbody>';
+                    keys.forEach(k => {
+                        const v = data[k];
+                        html += `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${typeof v === 'number' ? v.toFixed(4) : escapeHtml(String(v))}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                }
+            }
+            html += '</div>';
+        });
+    }
+
+    // Generated code
+    if (result.code_generated && result.code_generated.trim()) {
+        html += `<div class="result-card"><div class="result-card-header"><h4>&#128187; Generated Code (${escapeHtml(document.getElementById('analysisTool').value)})</h4>
+            <button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('genCodeBlock').textContent).then(()=>{this.innerHTML='&#10003; Copied';setTimeout(()=>{this.innerHTML='&#128203; Copy'},2000)})">&#128203; Copy</button></div>
+            <pre id="genCodeBlock" class="code-output">${escapeHtml(result.code_generated)}</pre></div>`;
+    }
+
+    if (!html) {
+        html = '<p class="placeholder-text">No results. Try: descriptive statistics, correlation, OLS regression, histogram, scatter plot, time series, or bar chart.</p>';
+    }
+
+    container.innerHTML = html;
+
+    // Attach download handlers
+    document.querySelectorAll('.download-plot').forEach(btn => {
+        btn.addEventListener('click', () => downloadPlot(btn.dataset.b64, btn.dataset.title, btn.dataset.fmt));
+    });
+}
+
+function downloadPlot(b64, title, fmt) {
+    const mime = fmt === 'jpg' ? 'image/jpeg' : fmt === 'svg' ? 'image/svg+xml' : fmt === 'pdf' ? 'application/pdf' : 'image/png';
+    const link = document.createElement('a');
+    link.href = `data:${mime};base64,${b64}`;
+    link.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}.${fmt}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// ---- Online data ----
+document.getElementById('fetchOnlineBtn')?.addEventListener('click', async () => {
+    const source = document.getElementById('onlineSource').value;
+    const query = document.getElementById('onlineQuery').value.trim();
+    if (!query) { showStatus('onlineStatus', 'Enter an indicator/query code.', 'error'); return; }
+
+    const country = document.getElementById('onlineCountry').value.trim() || 'all';
+    const yf = document.getElementById('onlineYearFrom').value.trim();
+    const yt = document.getElementById('onlineYearTo').value.trim();
+    const dateRange = (yf && yt) ? `${yf}:${yt}` : '2000:2024';
+
+    const btn = document.getElementById('fetchOnlineBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Fetching...';
+    showStatus('onlineStatus', `Fetching data from ${source}...`, 'loading');
+
+    try {
+        const r = await apiFetch('/api/analysis/online-data', {
+            method: 'POST',
+            body: JSON.stringify({ source, query, params: { country, date_range: dateRange } })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || 'Fetch failed');
+        hideStatus('onlineStatus');
+        renderOnlineResults(d.data);
+        showStatus('onlineStatus', d.data.message || 'Data fetched successfully.', 'success');
+    } catch (err) {
+        showStatus('onlineStatus', `Error: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#127760; Fetch Data';
+    }
+});
+
+function renderOnlineResults(data) {
+    const container = document.getElementById('onlineResults');
+    if (data.error) {
+        container.innerHTML = `<div class="result-card error"><p>${escapeHtml(data.error)}</p></div>`;
+        return;
+    }
+
+    let html = `<div class="result-card"><div class="result-card-header"><h4>&#127760; ${escapeHtml(data.source || 'Online Data')}</h4></div>`;
+    html += `<p><strong>Records:</strong> ${data.n_records || 'N/A'}</p>`;
+
+    if (data.download_url) {
+        html += `<p><a href="${escapeHtml(data.download_url)}" target="_blank" class="btn-secondary btn-sm">View Raw Data Source</a></p>`;
+    }
+
+    if (data.head && data.head.length > 0) {
+        const cols = Object.keys(data.head[0]);
+        html += '<table class="data-table"><thead><tr>';
+        cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+        html += '</tr></thead><tbody>';
+        data.head.forEach(row => {
+            html += '<tr>';
+            cols.forEach(c => {
+                const v = row[c];
+                html += `<td>${v === null || v === undefined ? '<span style="color:#cbd5e0;">—</span>' : escapeHtml(String(v).substring(0, 40))}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+    }
+
+    if (data.columns) {
+        html += `<div style="margin-top:0.5rem;font-size:0.8rem;color:#718096;">Columns: ${data.columns.map(c => escapeHtml(c)).join(', ')}</div>`;
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ---- Model suggestion ----
+document.getElementById('suggestModelBtn')?.addEventListener('click', async () => {
+    const methodology = document.getElementById('methodologyText').value.trim();
+    if (!methodology) { showStatus('modelStatus', 'Paste your methodology text first.', 'error'); return; }
+
+    const btn = document.getElementById('suggestModelBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+    showStatus('modelStatus', 'Analyzing methodology and suggesting models...', 'loading');
+
+    try {
+        const r = await apiFetch('/api/analysis/suggest-model', {
+            method: 'POST',
+            body: JSON.stringify({ methodology })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || 'Suggestion failed');
+        hideStatus('modelStatus');
+        renderModelSuggestions(d.suggestion);
+        showStatus('modelStatus', 'Model suggestions ready.', 'success');
+    } catch (err) {
+        showStatus('modelStatus', `Error: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '&#129504; Suggest Best Econometric Model';
+    }
+});
+
+function renderModelSuggestions(suggestion) {
+    const container = document.getElementById('modelSuggestions');
+    const primary = suggestion.primary_recommendation;
+    const all = suggestion.all_suggestions || [];
+    const note = suggestion.note || '';
+
+    let html = '';
+
+    // Primary recommendation - highlighted
+    if (primary) {
+        html += `<div class="result-card primary-recommendation">
+            <div class="result-card-header"><h4>&#11088; Primary Recommendation: ${escapeHtml(primary.model)}</h4>
+            <span class="match-score">${primary.score}% match</span></div>
+            <p>${escapeHtml(primary.description)}</p>
+            <div class="model-details">
+                <div class="model-detail"><strong>Methods:</strong> ${(primary.methods || []).map(m => `<span class="tag">${escapeHtml(m)}</span>`).join('')}</div>
+                <div class="model-detail"><strong>Software:</strong> ${escapeHtml(primary.software || '')}</div>
+                <div class="model-detail"><strong>Key Assumptions:</strong> ${(primary.assumptions || []).map(a => `<span class="tag tag-warn">${escapeHtml(a)}</span>`).join('')}</div>
+            </div>
+        </div>`;
+    }
+
+    // Other suggestions
+    if (all.length > 1) {
+        html += '<div class="result-card"><div class="result-card-header"><h4>&#128202; Alternative Models</h4></div>';
+        all.slice(1).forEach(s => {
+            html += `<div class="alt-model">
+                <div class="alt-model-header">
+                    <strong>${escapeHtml(s.model)}</strong>
+                    <span class="match-score small">${s.score}% match</span>
+                </div>
+                <p style="font-size:0.9rem;margin:0.25rem 0;">${escapeHtml(s.description)}</p>
+                <div style="font-size:0.85rem;color:#718096;">${escapeHtml(s.software || '')}</div>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    if (note) {
+        html += `<div class="result-card"><div class="result-card-header"><h4>&#8505; Note</h4></div><p>${escapeHtml(note)}</p></div>`;
+    }
+
+    container.innerHTML = html || '<p class="placeholder-text">No suggestions available.</p>';
+}
+
+// ---- Code generation (existing, updated status IDs) ----
 document.getElementById('generateAnalysisBtn').addEventListener('click', generateAnalysisCode);
 document.getElementById('getRecommendationsBtn').addEventListener('click', getAnalysisRecommendations);
 document.getElementById('copyAnalysisCodeBtn').addEventListener('click', copyAnalysisCode);
@@ -1309,7 +1693,7 @@ async function loadAnalysisMethods() {
             ).join('');
         }
     } catch (err) {
-        showStatus('analysisStatus', `Failed to load methods: ${err.message}`, 'error');
+        showStatus('codegenStatus', `Failed to load methods: ${err.message}`, 'error');
     }
 }
 
@@ -1327,7 +1711,7 @@ async function generateAnalysisCode() {
     const instruments = document.getElementById('analysisInstruments').value.trim();
 
     if (!dependent_var || !independent_vars) {
-        showStatus('analysisStatus', 'Please provide at least a dependent variable and independent variables.', 'error');
+        showStatus('codegenStatus', 'Please provide at least a dependent variable and independent variables.', 'error');
         return;
     }
 
@@ -1348,7 +1732,7 @@ async function generateAnalysisCode() {
     const btn = document.getElementById('generateAnalysisBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Generating...';
-    showStatus('analysisStatus', `Generating ${method} code in ${language}...`, 'loading');
+    showStatus('codegenStatus', `Generating ${method} code in ${language}...`, 'loading');
 
     try {
         const resp = await apiFetch('/api/analysis/generate', {
@@ -1361,14 +1745,14 @@ async function generateAnalysisCode() {
         }
         const data = await resp.json();
 
-        hideStatus('analysisStatus');
-        showStatus('analysisStatus', 'Analysis code generated successfully.', 'success');
+        hideStatus('codegenStatus');
+        showStatus('codegenStatus', 'Analysis code generated successfully.', 'success');
 
         const code = data.code || data.output || '';
         document.getElementById('analysisCodeOutput').textContent = code;
         document.getElementById('analysisCodeSection').style.display = 'block';
     } catch (err) {
-        showStatus('analysisStatus', `Generation failed: ${err.message}`, 'error');
+        showStatus('codegenStatus', `Generation failed: ${err.message}`, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '&#128202; Generate Analysis Code';
@@ -1384,7 +1768,7 @@ function copyAnalysisCode() {
         btn.innerHTML = '&#10003; Copied!';
         setTimeout(() => { btn.innerHTML = original; }, 2000);
     }).catch(() => {
-        showStatus('analysisStatus', 'Could not copy to clipboard. Please select and copy manually.', 'error');
+        showStatus('codegenStatus', 'Could not copy to clipboard. Please select and copy manually.', 'error');
     });
 }
 
@@ -1393,14 +1777,14 @@ async function getAnalysisRecommendations() {
     const data_type = document.getElementById('recommendDataType').value;
 
     if (!topic) {
-        showStatus('analysisStatus', 'Please enter a research topic for recommendations.', 'error');
+        showStatus('codegenStatus', 'Please enter a research topic for recommendations.', 'error');
         return;
     }
 
     const btn = document.getElementById('getRecommendationsBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Loading...';
-    showStatus('analysisStatus', 'Getting recommendations...', 'loading');
+    showStatus('codegenStatus', 'Getting recommendations...', 'loading');
     document.getElementById('analysisRecommendations').innerHTML = '';
 
     try {
@@ -1413,10 +1797,10 @@ async function getAnalysisRecommendations() {
             throw new Error(errData.detail || `HTTP ${resp.status}`);
         }
         const data = await resp.json();
-        hideStatus('analysisStatus');
+        hideStatus('codegenStatus');
         renderAnalysisRecommendations(data);
     } catch (err) {
-        showStatus('analysisStatus', `Failed: ${err.message}`, 'error');
+        showStatus('codegenStatus', `Failed: ${err.message}`, 'error');
     } finally {
         btn.disabled = false;
         btn.textContent = 'Get Recommendations';
