@@ -735,8 +735,9 @@ async def quick_generate(request: QuickGenerateRequest, user=Depends(require_aut
       5. Returns everything in one response
     """
     try:
-        # Step 1: Parse the prompt
-        section_type, topic = _parse_prompt(request.prompt)
+        # Step 1: Use section_type from the dropdown (request), parse topic from prompt
+        section_type = request.section_type or "literature_review"
+        _, topic = _parse_prompt(request.prompt)
         record_stat("quick_generate", {"section_type": section_type})
 
         # Step 2: Search for papers (with fallback strategy)

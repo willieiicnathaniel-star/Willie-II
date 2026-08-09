@@ -188,40 +188,45 @@ TASK_ROUTING = {
 
 SYSTEM_PROMPTS = {
     "academic_drafting": (
-        "You are an expert academic writer producing publication-quality text "
-        "suitable for Q1–Q3 indexed journals. Follow these rules strictly:\n\n"
-        "0. OUTPUT DISCIPLINE (CRITICAL): Do NOT repeat, echo, paraphrase, or "
-        "reference the prompt or instructions. Do NOT include preambles such as "
-        "'Here is...' or 'Sure, I'll write...'. Do NOT include postambles such as "
-        "'Let me know...' or 'I hope this helps.' Start DIRECTLY with the ## "
-        "heading of the academic content. End with the last paragraph of content "
-        "— no closing remarks.\n"
-        "1. STRUCTURE: Use Markdown headings to organize content hierarchically:\n"
-        "   - ## for the main section title (e.g., ## Literature Review: [Topic])\n"
-        "   - ### for thematic sub-sections (e.g., ### Institutional Quality and Growth)\n"
-        "   - #### for further sub-divisions within a theme when warranted\n"
-        "2. ACADEMIC TONE: Write in formal, objective, scholarly English. Use "
-        "third-person perspective, precise terminology, and hedged claims "
-        "(e.g., 'the evidence suggests,' 'these findings indicate'). Avoid "
-        "colloquialisms, contractions, and first-person pronouns unless "
-        "conventionally appropriate.\n"
-        "3. SYNTHESIS: Do not merely summarize sources sequentially. Group "
-        "findings thematically, compare and contrast methodologies, evaluate "
-        "convergences and divergences, and synthesize across studies.\n"
-        "4. CITATIONS: Use APA in-text citation format [e.g., (Author, Year)] "
-        "and only cite the sources provided in the context. NEVER fabricate "
-        "references. Number citations sequentially as they appear.\n"
-        "5. PARAGRAPH STRUCTURE: Each paragraph should begin with a clear topic "
-        "sentence, followed by evidence and analysis, and end with a transition "
-        "or concluding observation. Aim for 4–8 sentences per paragraph.\n"
-        "6. COMPLETENESS: Ensure the text has a clear introduction framing the "
-        "section, well-developed body paragraphs, and a concluding synthesis "
-        "or summary paragraph that ties findings together and identifies gaps.\n"
-        "7. JOURNAL STANDARD: The writing must meet the rigor expected in "
-        "Q1–Q3 indexed journals: precise operational definitions, attention "
-        "to methodological quality, awareness of limitations, and engagement "
-        "with theoretical frameworks.\n"
-        "Return ONLY the academic text in Markdown format. No meta-commentary."
+        "You are an expert academic writer producing publication-quality text for "
+        "Q1-Q3 indexed journals.\n\n"
+        "=== OUTPUT DISCIPLINE (CRITICAL) ===\n"
+        "1. Start DIRECTLY with a ## heading. NO preambles like 'Here is...' or 'Sure.'\n"
+        "2. End with the last content paragraph. NO postambles like 'Let me know...'\n"
+        "3. Do NOT repeat, echo, or reference any part of the prompt.\n"
+        "4. Do NOT include labels like 'SECTION TYPE', 'RESEARCH TOPIC', 'SOURCE MATERIAL',\n"
+        "   'FORMATTING RULES', 'BEGIN OUTPUT', or 'TARGET LENGTH'.\n"
+        "5. Do NOT list the sources back. Use them ONLY for in-text citations.\n"
+        "6. Return ONLY the academic text in Markdown. No meta-commentary.\n\n"
+        "=== HEADING STRUCTURE (MANDATORY) ===\n"
+        "You MUST use this heading hierarchy:\n"
+        "  ## Main Section Title\n"
+        "  [1 framing paragraph]\n"
+        "  ### Sub-Heading 1\n"
+        "  [2-3 paragraphs]\n"
+        "  ### Sub-Heading 2\n"
+        "  [2-3 paragraphs]\n"
+        "  ### Synthesis and Research Gaps\n"
+        "  [1-2 closing paragraphs]\n\n"
+        "For a Literature Review, use thematic ### sub-headings like:\n"
+        "  ### Institutional Quality and Governance\n"
+        "  ### Economic Growth Determinants\n"
+        "  ### Synthesis and Research Gaps\n\n"
+        "For an Introduction:\n"
+        "  ### Background and Context\n"
+        "  ### Research Problem and Gap\n"
+        "  ### Objectives and Contribution\n\n"
+        "For a Conclusion:\n"
+        "  ### Summary of Key Findings\n"
+        "  ### Policy Implications\n"
+        "  ### Limitations and Future Research\n\n"
+        "=== ACADEMIC STANDARDS ===\n"
+        "- Formal, objective, scholarly English (third person, hedged claims).\n"
+        "- APA in-text citations: (Author, Year). Cite ONLY provided sources.\n"
+        "- NEVER fabricate references.\n"
+        "- Synthesize thematically. Do NOT list papers sequentially.\n"
+        "- 4-8 sentences per paragraph with topic sentence, evidence, analysis.\n"
+        "- Clear beginning (framing), middle (analysis), end (synthesis)."
     ),
     "topic_suggestion": (
         "You are a research advisor helping a scholar identify novel research "
@@ -256,13 +261,20 @@ SYSTEM_PROMPTS = {
         "comments explaining each step. Return the code in a Markdown code block."
     ),
     "quick_generate": (
-        "You are an expert academic researcher and writer. Using the provided "
-        "search results, generate a well-structured academic text with in-text "
-        "citations (APA format). Only cite the sources provided.\n\n"
-        "CRITICAL: Do NOT repeat, echo, or reference the prompt. Do NOT include "
-        "preambles ('Here is...', 'Certainly...') or postambles ('Let me know...'). "
-        "Start DIRECTLY with the ## heading. Return ONLY the academic text in "
-        "Markdown format."
+        "You are an expert academic researcher and writer.\n\n"
+        "=== OUTPUT DISCIPLINE (CRITICAL) ===\n"
+        "1. Start DIRECTLY with a ## heading. NO preambles.\n"
+        "2. End with the last content paragraph. NO postambles.\n"
+        "3. Do NOT repeat or echo the prompt. Do NOT include source lists.\n"
+        "4. Return ONLY the academic text in Markdown.\n\n"
+        "=== HEADING STRUCTURE (MANDATORY) ===\n"
+        "  ## Main Section Title\n"
+        "  ### Thematic Sub-Headings (at least 2-3)\n"
+        "  ### Synthesis and Research Gaps\n\n"
+        "=== ACADEMIC STANDARDS ===\n"
+        "- Formal scholarly English. APA in-text citations: (Author, Year).\n"
+        "- Cite ONLY provided sources. NEVER fabricate.\n"
+        "- Synthesize thematically, not sequentially."
     ),
     "general": (
         "You are a knowledgeable AI assistant. Respond clearly and concisely "
@@ -576,11 +588,15 @@ _PREAMBLE_PATTERNS = [
     r"based\s+on\s+(?:the\s+)?(?:provided\s+)?(?:sources|context|search))",
     r"^(write\s+(?:a|an)\s+\w+.*(?:about|on|regarding)\s*:?)",
     r"^(topic\s*:\s*.{3,})",
-    r"^(section\s*:\s*.{3,})",
+    r"^(section\s*(?:type)?\s*:\s*.{3,})",
+    r"^(research\s+topic\s*:\s*.{3,})",
     r"^(target\s+length\s*:)",
     r"^(requirements?\s*:)",
+    r"^(formatting\s+rules?\s*:)",
     r"^(structure\s+for\s+)",
     r"^(use\s+the\s+following\s+sources)",
+    r"^(source\s+material)",
+    r"^(begin\s+output)",
 ]
 
 # Patterns that indicate a postamble line
@@ -627,6 +643,9 @@ def _clean_ai_output(text: str, original_prompt: str = "") -> str:
         if not stripped:
             cleaned_lines.pop(0)
             continue
+        # NEVER strip markdown headings (lines starting with #)
+        if stripped.startswith("#"):
+            break
         # Check if this line matches a preamble pattern
         if _PREAMBLE_RE.match(stripped):
             cleaned_lines.pop(0)
@@ -636,9 +655,7 @@ def _clean_ai_output(text: str, original_prompt: str = "") -> str:
             cleaned_lines.pop(0)
             continue
         # Check if this line looks like an instruction rather than content
-        # (starts with a capital letter, contains "write" or "generate", and
-        # doesn't start with ## which would be a heading)
-        if not stripped.startswith("#") and _looks_like_instruction(stripped):
+        if _looks_like_instruction(stripped):
             cleaned_lines.pop(0)
             continue
         break
@@ -662,23 +679,160 @@ def _clean_ai_output(text: str, original_prompt: str = "") -> str:
     return result if result else text.strip()
 
 
+# Patterns for prompt residues that can appear ANYWHERE in the output
+_PROMPT_RESIDUE_PATTERNS = [
+    _re.compile(r"^section\s*(?:type)?\s*:\s*", _re.IGNORECASE),
+    _re.compile(r"^research\s+topic\s*:\s*", _re.IGNORECASE),
+    _re.compile(r"^target\s+length\s*:\s*", _re.IGNORECASE),
+    _re.compile(r"^formatting\s+rules?\s*:", _re.IGNORECASE),
+    _re.compile(r"^begin\s+output\b", _re.IGNORECASE),
+    _re.compile(r"^source\s+material\b", _re.IGNORECASE),
+    _re.compile(r"^structure\s+for\s+", _re.IGNORECASE),
+    _re.compile(r"^use\s+the\s+following\s+sources?", _re.IGNORECASE),
+    _re.compile(r"^requirements?\s*:\s*", _re.IGNORECASE),
+    # Source-list entries: [1] Author (Year). Title. Journal.
+    _re.compile(r"^\[\d+\]\s+[A-Z][a-zA-Z]+.*\(\d{4}\)"),
+    # Indented "Abstract:" lines from source material
+    _re.compile(r"^\s{4,}abstract\s*:", _re.IGNORECASE),
+]
+
+# Lines that look like instructions rather than academic content
+_INSTRUCTION_LINE_RE = _re.compile(
+    r"^(write|generate|create|produce|draft)\s+(?:a|an|the)\s+",
+    _re.IGNORECASE,
+)
+
+
+def _strip_prompt_residues(text: str, original_prompt: str = "") -> str:
+    """Remove prompt echoes and source-material residues from ANYWHERE in the text.
+
+    Unlike _clean_ai_output (which only strips top/bottom), this function scans
+    every line and removes:
+      - Prompt section headers (SECTION TYPE:, RESEARCH TOPIC:, SOURCE MATERIAL, etc.)
+      - Source-list entries ([1] Author (Year). Title. Journal.)
+      - Indented Abstract: lines from source material
+      - Instruction-like lines (Write a..., Generate a..., etc.)
+      - Near-exact copies of prompt instruction lines
+
+    Also collapses excessive blank lines left behind by removed lines.
+    """
+    if not text or not text.strip():
+        return text
+
+    lines = text.split("\n")
+    kept: list[str] = []
+
+    # Pre-extract prompt instruction lines for near-exact matching
+    prompt_lines_lower = set()
+    if original_prompt:
+        for pl in original_prompt.split("\n"):
+            pl_lower = pl.lower().strip()
+            if len(pl_lower) >= 30:
+                prompt_lines_lower.add(pl_lower)
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Always keep blank lines (we'll collapse extras later)
+        if not stripped:
+            kept.append(line)
+            continue
+
+        # NEVER remove markdown headings
+        if stripped.startswith("#"):
+            kept.append(line)
+            continue
+
+        # Check against residue patterns
+        is_residue = False
+        for pat in _PROMPT_RESIDUE_PATTERNS:
+            if pat.match(stripped):
+                is_residue = True
+                break
+
+        if not is_residue and _INSTRUCTION_LINE_RE.match(stripped):
+            is_residue = True
+
+        # Check for near-exact prompt line matches
+        if not is_residue and prompt_lines_lower:
+            line_lower = stripped.lower()
+            if len(line_lower) >= 30:
+                for pl in prompt_lines_lower:
+                    if line_lower == pl:
+                        is_residue = True
+                        break
+                    # Check if a 50-char chunk of the prompt line appears in this line
+                    if len(pl) >= 50:
+                        for i in range(0, len(pl) - 50, 10):
+                            if pl[i:i + 50] in line_lower:
+                                is_residue = True
+                                break
+                    if is_residue:
+                        break
+
+        if not is_residue:
+            kept.append(line)
+
+    # Collapse 3+ consecutive blank lines into 2
+    result_lines: list[str] = []
+    blank_count = 0
+    for line in kept:
+        if line.strip() == "":
+            blank_count += 1
+            if blank_count <= 2:
+                result_lines.append(line)
+        else:
+            blank_count = 0
+            result_lines.append(line)
+
+    # Strip leading/trailing blanks
+    while result_lines and not result_lines[0].strip():
+        result_lines.pop(0)
+    while result_lines and not result_lines[-1].strip():
+        result_lines.pop()
+
+    result = "\n".join(result_lines).strip()
+    return result if result else text.strip()
+
+
 def _is_prompt_echo(line: str, prompt: str) -> bool:
-    """Check if a line echoes part of the original prompt."""
+    """Check if a line echoes part of the original prompt.
+
+    Conservative: only flags lines that clearly repeat prompt LABELS
+    (e.g., 'SECTION TYPE:', 'RESEARCH TOPIC:', 'TARGET LENGTH:') or
+    lines that are near-exact copies of prompt instruction lines.
+    Does NOT flag headings or content that merely shares the topic name.
+    """
     line_lower = line.lower().strip()
-    prompt_lower = prompt.lower()
 
-    # Check if the line contains a significant substring from the prompt
-    # (at least 15 chars to avoid false positives)
-    if len(line_lower) >= 15:
-        # Check if a chunk of the prompt appears in this line
-        for i in range(0, len(prompt_lower) - 15, 5):
-            chunk = prompt_lower[i:i + 20]
-            if chunk in line_lower:
-                return True
+    # Only check for prompt label echoes — NOT topic name matches
+    prompt_labels = [
+        "section type:", "research topic:", "target length:",
+        "formatting rules:", "source material", "begin output",
+        "requirements:", "structure for",
+    ]
+    for label in prompt_labels:
+        if line_lower.startswith(label):
+            return True
 
-    # Check for "Write a [section] about: [topic]" pattern
+    # Check for "Write a [section] about: [topic]" pattern (old prompt format)
     if _re.match(r"^write\s+(?:a|an)\s+\w+.*(?:about|on|regarding)\s*:?", line_lower):
         return True
+
+    # Check for near-exact match of a full prompt line (40+ chars)
+    # This catches cases where the AI copies an entire instruction line
+    if len(line_lower) >= 40:
+        prompt_lines = [l.lower().strip() for l in prompt.split("\n") if len(l.strip()) >= 40]
+        for pl in prompt_lines:
+            # Check if the line is >80% similar to a prompt line
+            if line_lower == pl:
+                return True
+            # Check for substantial overlap (50+ char substring)
+            if len(pl) >= 50:
+                for i in range(0, len(pl) - 50, 10):
+                    chunk = pl[i:i + 50]
+                    if chunk in line_lower:
+                        return True
 
     return False
 
@@ -696,6 +850,157 @@ def _looks_like_instruction(line: str) -> bool:
         if line_lower.startswith(start):
             return True
     return False
+
+
+def _ensure_heading(text: str, section_type: str, topic: str) -> str:
+    """Ensure the AI output starts with a proper ## heading.
+
+    If the output doesn't start with a markdown heading, prepend one
+    based on the section type and topic.
+    """
+    if not text or not text.strip():
+        return text
+
+    stripped = text.strip()
+    if stripped.startswith("#"):
+        return text  # Already has a heading
+
+    section_labels = {
+        "literature_review": f"## Literature Review: {topic}",
+        "introduction": "## Introduction",
+        "abstract": "## Abstract",
+        "conclusion": "## Conclusion",
+        "summary": "## Summary",
+    }
+    heading = section_labels.get(section_type, f"## {topic}")
+
+    return f"{heading}\n\n{stripped}"
+
+
+# Default sub-heading sets for sections that lack them
+_SUBHEADING_SETS = {
+    "literature_review": [
+        "### Conceptual Framework and Theoretical Perspectives",
+        "### Empirical Evidence and Thematic Synthesis",
+        "### Methodological Approaches in the Literature",
+        "### Synthesis and Research Gaps",
+    ],
+    "introduction": [
+        "### Background and Context",
+        "### Research Problem and Gap",
+        "### Objectives and Contribution",
+    ],
+    "conclusion": [
+        "### Summary of Key Findings",
+        "### Policy and Practical Implications",
+        "### Limitations and Future Research",
+    ],
+    "summary": [
+        "### Main Arguments",
+        "### Key Findings",
+        "### Concluding Remarks",
+    ],
+}
+
+
+def _ensure_subheadings(text: str, section_type: str) -> str:
+    """Ensure the text has ### sub-headings when the section type warrants them.
+
+    If the AI output has a ## heading but no ### sub-headings, this function
+    splits the body paragraphs and inserts thematic ### sub-headings.
+
+    For abstracts (single-paragraph sections), sub-headings are NOT added.
+    """
+    if not text or not text.strip():
+        return text
+
+    # Abstracts are typically a single paragraph — skip
+    if section_type == "abstract":
+        return text
+
+    subheadings = _SUBHEADING_SETS.get(section_type)
+    if not subheadings:
+        return text  # Unknown section type — don't modify
+
+    lines = text.split("\n")
+
+    # Count existing ### sub-headings (exclude the main ## heading)
+    has_subheadings = any(
+        line.strip().startswith("###") for line in lines
+    )
+    if has_subheadings:
+        return text  # Already has sub-headings — respect AI's structure
+
+    # Split into: main_heading_part + body_paragraphs
+    main_heading_line = None
+    body_start_idx = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith("#"):
+            main_heading_line = line
+            # Skip blank lines after heading
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            body_start_idx = j
+            break
+
+    # Collect body paragraphs (paragraphs separated by blank lines)
+    body_lines = lines[body_start_idx:]
+    paragraphs: list[list[str]] = []
+    current_para: list[str] = []
+
+    for line in body_lines:
+        if line.strip() == "":
+            if current_para:
+                paragraphs.append(current_para)
+                current_para = []
+        else:
+            current_para.append(line)
+    if current_para:
+        paragraphs.append(current_para)
+
+    # Need at least 3 paragraphs to warrant sub-headings
+    if len(paragraphs) < 3:
+        return text
+
+    # Distribute paragraphs across sub-headings
+    num_subs = min(len(subheadings), len(paragraphs))
+    # Group paragraphs: first section gets intro + first theme, last gets synthesis
+    result_lines: list[str] = []
+
+    if main_heading_line is not None:
+        result_lines.append(main_heading_line)
+        result_lines.append("")
+
+    # Distribute paragraphs evenly across available sub-headings.
+    # Ensures every sub-heading (including the last "Synthesis") gets a group.
+    num_groups = min(num_subs, len(paragraphs))
+    chunk_size = len(paragraphs) // num_groups
+    remainder = len(paragraphs) % num_groups
+
+    groups: list = []
+    start = 0
+    for i in range(num_groups):
+        size = chunk_size + (1 if i < remainder else 0)
+        end = start + size
+        groups.append(paragraphs[start:end])
+        start = end
+
+    for i, group in enumerate(groups):
+        if i < len(subheadings):
+            result_lines.append(subheadings[i])
+            result_lines.append("")
+        # group is a list of paragraphs; each paragraph is a list of line strings
+        for para in group:
+            for line in para:
+                result_lines.append(line)
+            result_lines.append("")  # blank line between paragraphs
+
+    # Strip trailing blank lines
+    while result_lines and isinstance(result_lines[-1], str) and not result_lines[-1].strip():
+        result_lines.pop()
+
+    return "\n".join(result_lines)
 
 
 # ---------------------------------------------------------------------------
@@ -815,93 +1120,33 @@ async def generate_academic_text(
         (generated_text, model_display_name) on success
         (None, None) if all models fail
     """
-    # Section-specific structural guidance
-    structure_guides = {
-        "literature_review": (
-            "STRUCTURE for Literature Review:\n"
-            "- Begin with ## Literature Review: {topic}\n"
-            "- Write a framing introduction paragraph (no sub-heading) that scope\n"
-            "  the review, states the number of sources, and outlines the thematic\n"
-            "  organization.\n"
-            "- Create ### sub-headings for each thematic cluster (e.g., ### Institutional\n"
-            "  Quality and Governance, ### Economic Growth Determinants). Group 2–4\n"
-            "  papers per theme. Under each sub-heading, write 2–3 paragraphs that\n"
-            "  synthesize findings, compare methodologies, and evaluate convergence.\n"
-            "- Use #### sub-sub-headings only if a theme has enough papers to warrant\n"
-            "  further division.\n"
-            "- End with ### Synthesis and Research Gaps — summarise overarching\n"
-            "  patterns, note contradictions, identify methodological gaps, and\n"
-            "  propose directions for future research.\n"
-        ),
-        "introduction": (
-            "STRUCTURE for Introduction:\n"
-            "- Begin with ## Introduction\n"
-            "- Paragraph 1: Broad context and significance of the topic.\n"
-            "- Paragraph 2: Narrow to the specific research problem and gap.\n"
-            "- Use ### sub-headings if the introduction covers multiple dimensions\n"
-            "  (e.g., ### Background, ### Research Gap, ### Objectives).\n"
-            "- Paragraph 3: State the research question(s) or objectives clearly.\n"
-            "- Paragraph 4: Briefly preview the structure of the paper.\n"
-        ),
-        "abstract": (
-            "STRUCTURE for Abstract (150–250 words, single paragraph unless\n"
-            "the target journal requires structured abstracts):\n"
-            "- Begin with ## Abstract\n"
-            "- Write ONE dense paragraph covering: (1) purpose/objective, (2) data\n"
-            "  and methodology, (3) key findings, (4) implications/contribution.\n"
-            "- Do NOT use sub-headings for an unstructured abstract.\n"
-            "- If the journal requires a structured abstract, use ### sub-headings:\n"
-            "  ### Purpose, ### Methodology, ### Findings, ### Implications.\n"
-        ),
-        "conclusion": (
-            "STRUCTURE for Conclusion:\n"
-            "- Begin with ## Conclusion\n"
-            "- Paragraph 1: Restate the research problem and summarise key findings.\n"
-            "- Use ### sub-headings if covering multiple themes (e.g., ### Summary\n"
-            "  of Findings, ### Policy Implications, ### Limitations, ### Future\n"
-            "  Research).\n"
-            "- Paragraph 2+: Discuss implications, acknowledge limitations, and\n"
-            "  propose avenues for future research.\n"
-            "- Final paragraph: Closing statement on the contribution and broader\n"
-            "  significance.\n"
-        ),
-        "summary": (
-            "STRUCTURE for Summary:\n"
-            "- Begin with ## Summary\n"
-            "- Write 2–3 paragraphs that distil the main arguments and findings.\n"
-            "- Use ### sub-headings if the summary spans multiple themes.\n"
-            "- End with a concluding paragraph that highlights the take-away\n"
-            "  message.\n"
-        ),
-    }
-
     section_label = section_type.replace("_", " ")
-    structure_guide = structure_guides.get(section_type, "")
 
+    # Minimal user prompt — structural guidance lives in the system prompt.
+    # Less instruction text = less surface for the AI to echo back.
     user_prompt = (
-        f"SECTION TYPE: {section_label}\n"
-        f"RESEARCH TOPIC: {topic}\n"
-        f"TARGET LENGTH: approximately {max_words} words.\n\n"
-        f"{structure_guide}\n"
-        f"SOURCE MATERIAL — cite ONLY these using APA in-text format "
-        f"[e.g., (Author, Year)]. Do NOT fabricate references:\n\n"
-        f"{context}\n\n"
-        f"FORMATTING RULES:\n"
-        f"- Markdown headings (##, ###, ####) as specified above.\n"
-        f"- Formal academic English for Q1–Q3 indexed journals.\n"
-        f"- Synthesize thematically; do NOT list papers sequentially.\n"
-        f"- Each paragraph: topic sentence, evidence with citations, analysis.\n"
-        f"- Clear beginning (framing), middle (analysis), end (synthesis).\n\n"
-        f"BEGIN OUTPUT NOW — start directly with the ## heading. "
-        f"Do NOT repeat these instructions."
+        f"Write a {section_label} on \"{topic}\" (~{max_words} words).\n"
+        f"Use ONLY these sources for citations (APA format):\n{context}"
     )
 
     max_tokens = min(max_words * 4, 6000)
 
-    return await generate_text(
+    text, model = await generate_text(
         user_prompt=user_prompt,
         task_type="academic_drafting",
         max_tokens=max_tokens,
         temperature=0.7,
         timeout=90.0,
     )
+
+    if text:
+        # Layer 1: _clean_ai_output already ran inside generate_text
+        #         (strips top/bottom preambles & postambles)
+        # Layer 2: Strip prompt residues from ANYWHERE in the text
+        text = _strip_prompt_residues(text, user_prompt)
+        # Layer 3: Ensure the output starts with a proper ## heading
+        text = _ensure_heading(text, section_type, topic)
+        # Layer 4: Ensure ### sub-headings exist (injects if missing)
+        text = _ensure_subheadings(text, section_type)
+
+    return text, model
