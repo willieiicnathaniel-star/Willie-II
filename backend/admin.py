@@ -43,6 +43,7 @@ class SystemConfig:
     dashscope_api_key: str = ""
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    doubao_api_key: str = ""
 
     # Search defaults
     default_max_results: int = 25

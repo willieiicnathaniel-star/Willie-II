@@ -3639,8 +3639,9 @@ const AI_PROVIDER_LABELS = {
     deepseek:  { name: 'DeepSeek',                 link: 'https://platform.deepseek.com/api_keys',          tier: 'Free tier' },
     mistral:   { name: 'Mistral AI',               link: 'https://console.mistral.ai/api-keys/',            tier: 'Free tier' },
     qwen:      { name: 'Qwen (Alibaba DashScope)', link: 'https://dashscope.console.aliyun.com/apiKey',     tier: 'Free tier' },
-    openai:    { name: 'OpenAI (GPT-4o)',          link: 'https://platform.openai.com/api-keys',            tier: 'Paid' },
+    openai:    { name: 'OpenAI (GPT-5)',           link: 'https://platform.openai.com/api-keys',            tier: 'Paid' },
     anthropic: { name: 'Anthropic (Claude)',       link: 'https://console.anthropic.com/settings/keys',     tier: 'Paid' },
+    doubao:    { name: 'Doubao (ByteDance)',       link: 'https://console.volcengine.com/ark/',             tier: 'Free tier' },
 };
 
 async function loadAiConfig() {

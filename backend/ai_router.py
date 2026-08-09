@@ -7,13 +7,14 @@ Supports models with FREE API tiers:
   - DeepSeek       (deepseek-chat, deepseek-coder)
   - Mistral AI     (mistral-small-latest, mistral-tiny)
   - Qwen / DashScope (qwen-max, qwen-plus, qwen-turbo)
+  - Doubao         (doubao-seed-1.6, doubao-seed-1.6-flash) — ByteDance Volcano Engine
 
 Also supports PAID models (require API keys):
   - OpenAI         (gpt-5, gpt-5-mini, gpt-4o)
   - Anthropic      (claude-sonnet-4, claude-3-5-sonnet, claude-3-haiku)
 
-Academic drafting priority: Claude Sonnet 4 > GPT-5 > Qwen-Max >
-  Claude 3.5 Sonnet > GPT-4o > Qwen-Plus > DeepSeek > Gemini > Groq > Mistral
+Academic drafting priority: Claude Sonnet 4 > GPT-5 > Qwen-Max > Doubao-Seed-1.6 >
+  Claude 3.5 Sonnet > GPT-4o > Qwen-Plus > Doubao-Flash > DeepSeek > Gemini > Groq > Mistral
 
 Auto-routing: Each task type has a preferred model priority order.
 Fallback: If a model fails (rate limit, error, no key), tries the next.
@@ -85,6 +86,14 @@ PROVIDERS = {
         "free_tier": False,
         "api_style": "anthropic",
     },
+    "doubao": {
+        "display_name": "Doubao (ByteDance Volcano Engine)",
+        "env_key": "DOUBAO_API_KEY",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "models": ["doubao-seed-1-6-251015", "doubao-seed-1-6-flash-250828"],
+        "free_tier": True,
+        "api_style": "openai",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -96,9 +105,11 @@ TASK_ROUTING = {
         ("anthropic", "claude-sonnet-4-20250514"),
         ("openai", "gpt-5"),
         ("qwen", "qwen-max"),
+        ("doubao", "doubao-seed-1-6-251015"),
         ("anthropic", "claude-3-5-sonnet-20241022"),
         ("openai", "gpt-4o"),
         ("qwen", "qwen-plus"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("deepseek", "deepseek-chat"),
         ("gemini", "gemini-1.5-pro"),
         ("groq", "llama-3.3-70b-versatile"),
@@ -107,36 +118,42 @@ TASK_ROUTING = {
     "topic_suggestion": [
         ("groq", "llama-3.3-70b-versatile"),
         ("gemini", "gemini-2.0-flash"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("mistral", "mistral-small-latest"),
         ("deepseek", "deepseek-chat"),
         ("qwen", "qwen-turbo"),
     ],
     "roadmap_generation": [
         ("gemini", "gemini-2.0-flash"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("deepseek", "deepseek-chat"),
         ("qwen", "qwen-turbo"),
         ("groq", "llama-3.3-70b-versatile"),
     ],
     "grammar_fix": [
         ("gemini", "gemini-2.0-flash"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("mistral", "mistral-tiny"),
         ("groq", "gemma2-9b-it"),
         ("deepseek", "deepseek-chat"),
     ],
     "paraphrase": [
         ("deepseek", "deepseek-chat"),
+        ("doubao", "doubao-seed-1-6-251015"),
         ("gemini", "gemini-1.5-pro"),
         ("qwen", "qwen-plus"),
         ("groq", "llama-3.3-70b-versatile"),
     ],
     "academic_enhance": [
         ("deepseek", "deepseek-chat"),
+        ("doubao", "doubao-seed-1-6-251015"),
         ("gemini", "gemini-1.5-pro"),
         ("groq", "llama-3.3-70b-versatile"),
         ("mistral", "mistral-small-latest"),
     ],
     "code_generation": [
         ("deepseek", "deepseek-coder"),
+        ("doubao", "doubao-seed-1-6-251015"),
         ("qwen", "qwen-plus"),
         ("gemini", "gemini-2.0-flash"),
         ("groq", "llama-3.3-70b-versatile"),
@@ -145,9 +162,11 @@ TASK_ROUTING = {
         ("anthropic", "claude-sonnet-4-20250514"),
         ("openai", "gpt-5"),
         ("qwen", "qwen-max"),
+        ("doubao", "doubao-seed-1-6-251015"),
         ("anthropic", "claude-3-5-sonnet-20241022"),
         ("openai", "gpt-4o"),
         ("qwen", "qwen-plus"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("deepseek", "deepseek-chat"),
         ("gemini", "gemini-1.5-pro"),
         ("groq", "llama-3.3-70b-versatile"),
@@ -156,6 +175,7 @@ TASK_ROUTING = {
     "general": [
         ("gemini", "gemini-2.0-flash"),
         ("groq", "llama-3.3-70b-versatile"),
+        ("doubao", "doubao-seed-1-6-flash-250828"),
         ("deepseek", "deepseek-chat"),
         ("mistral", "mistral-small-latest"),
         ("qwen", "qwen-turbo"),

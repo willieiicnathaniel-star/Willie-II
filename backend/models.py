@@ -320,7 +320,7 @@ class ProfileUpdateRequest(BaseModel):
 
 
 class AiTestRequest(BaseModel):
-    provider: str = Field(..., description="Provider ID: gemini, groq, deepseek, mistral, qwen, openai, anthropic")
+    provider: str = Field(..., description="Provider ID: gemini, groq, deepseek, mistral, qwen, openai, anthropic, doubao")
     api_key: str = Field(default=None, description="Optional API key to test (uses configured key if omitted)")
 
 
