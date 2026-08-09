@@ -561,7 +561,12 @@ async def draft(request: DraftRequest, user=Depends(require_auth)):
         # Try AI-powered enhancement
         context_parts = []
         for i, p in enumerate(request.papers[:10], 1):
-            auth = p.authors if isinstance(p.authors, str) else ", ".join(p.authors[:3]) if p.authors else "Unknown"
+            if isinstance(p.authors, str):
+                auth = p.authors
+            elif p.authors:
+                auth = ", ".join(a.name if hasattr(a, 'name') else str(a) for a in p.authors[:3])
+            else:
+                auth = "Unknown"
             context_parts.append(f"[{i}] {auth} ({p.year}). {p.title}. {p.journal or ''}.")
             if p.abstract:
                 context_parts.append(f"    Abstract: {p.abstract[:300]}")
@@ -854,7 +859,12 @@ async def quick_generate(request: QuickGenerateRequest, user=Depends(require_aut
         # Try AI-powered generation (auto-routes to best available model)
         context_parts = []
         for i, p in enumerate(papers[:10], 1):
-            auth = p.authors if isinstance(p.authors, str) else ", ".join(p.authors[:3]) if p.authors else "Unknown"
+            if isinstance(p.authors, str):
+                auth = p.authors
+            elif p.authors:
+                auth = ", ".join(a.name if hasattr(a, 'name') else str(a) for a in p.authors[:3])
+            else:
+                auth = "Unknown"
             context_parts.append(f"[{i}] {auth} ({p.year}). {p.title}. {p.journal or ''}.")
             if p.abstract:
                 context_parts.append(f"    Abstract: {p.abstract[:300]}")
