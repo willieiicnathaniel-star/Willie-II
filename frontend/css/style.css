@@ -2658,13 +2658,22 @@ code {
 .doi-link:hover { text-decoration: underline; }
 
 .source-tag {
-    background: #e6fffa;
-    color: #2c7a7b;
     font-size: 0.7rem;
     padding: 0.1rem 0.5rem;
     border-radius: 10px;
-    border: 1px solid #b2f5ea;
+    font-weight: 600;
+    border: 1px solid transparent;
 }
+
+/* Source-specific badge colors */
+.source-tag.src-openalex { background: #ebf8ff; color: #2c5282; border-color: #bee3f8; }
+.source-tag.src-s2 { background: #fef5e7; color: #c05621; border-color: #fbd38d; }
+.source-tag.src-core { background: #f0fff4; color: #276749; border-color: #c6f6d5; }
+.source-tag.src-crossref { background: #fff5f5; color: #c53030; border-color: #fed7d7; }
+.source-tag.src-doaj { background: #faf5ff; color: #6b46c1; border-color: #e9d8fd; }
+.source-tag.src-arxiv { background: #1a202c; color: #a0aec0; border-color: #4a5568; }
+.source-tag.src-academia { background: #fefefe; color: #4a5568; border-color: #e2e8f0; }
+.source-tag.src-default { background: #e6fffa; color: #2c7a7b; border-color: #b2f5ea; }
 
 .license-tag {
     background: #fefcbf;

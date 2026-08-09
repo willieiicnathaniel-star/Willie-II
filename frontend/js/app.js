@@ -3338,7 +3338,7 @@ document.getElementById('findArticlesBtn').addEventListener('click', async () =>
     const btn = document.getElementById('findArticlesBtn');
     btn.disabled = true;
     btn.innerHTML = 'Searching...';
-    showStatus('articlesStatus', 'Searching OpenAlex and Semantic Scholar for open-access articles with PDFs...', 'loading');
+    showStatus('articlesStatus', 'Searching 7 platforms (OpenAlex, Semantic Scholar, CORE, Crossref, DOAJ, arXiv, Academia.edu) for open-access articles with PDFs across 300M+ papers...', 'loading');
     document.getElementById('articlesResults').innerHTML = '';
 
     try {
@@ -3353,9 +3353,10 @@ document.getElementById('findArticlesBtn').addEventListener('click', async () =>
         const data = await resp.json();
         hideStatus('articlesStatus');
         if (data.total_found === 0) {
-            showStatus('articlesStatus', 'No open-access articles with PDFs found. Try a broader topic.', 'error');
+            showStatus('articlesStatus', 'No open-access articles found across any of the 7 platforms. Try broader keywords or a different topic.', 'error');
         } else {
-            showStatus('articlesStatus', `Found ${data.total_found} open-access articles with downloadable PDFs.`, 'success');
+            const sources = data.sources_succeeded ? data.sources_succeeded.join(', ') : 'multiple sources';
+            showStatus('articlesStatus', `Found ${data.total_found} open-access articles from: ${sources}. Download PDFs directly or click "Open in Browser" to access the source.`, 'success');
         }
         renderOAArticles(data);
     } catch (err) {
@@ -3375,6 +3376,20 @@ function renderOAArticles(data) {
         return;
     }
 
+    // Source-specific CSS classes for badges
+    const sourceClass = (src) => {
+        const map = {
+            'OpenAlex': 'src-openalex',
+            'Semantic Scholar': 'src-s2',
+            'CORE': 'src-core',
+            'Crossref': 'src-crossref',
+            'DOAJ': 'src-doaj',
+            'arXiv': 'src-arxiv',
+            'Academia.edu': 'src-academia',
+        };
+        return map[src] || 'src-default';
+    };
+
     const articlesHtml = data.articles.map((a, i) => {
         const authors = a.authors && a.authors.length > 0
             ? a.authors.join(', ') + (a.authors.length > 5 ? ' et al.' : '')
@@ -3387,7 +3402,8 @@ function renderOAArticles(data) {
         const doiLink = a.doi
             ? `<a href="https://doi.org/${escapeHtml(a.doi)}" target="_blank" class="doi-link">${escapeHtml(a.doi)}</a>`
             : '';
-        const sourceTag = a.source ? `<span class="source-tag">${escapeHtml(a.source)}</span>` : '';
+        const srcCls = sourceClass(a.source);
+        const sourceTag = a.source ? `<span class="source-tag ${srcCls}">${escapeHtml(a.source)}</span>` : '';
 
         return `
             <div class="oa-article-card">

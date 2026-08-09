@@ -11,18 +11,20 @@ All three APIs are free to use:
 import httpx
 import asyncio
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote_plus
 
 from .models import Paper, Author, SearchRequest, SearchResponse
 from .quartiles import lookup_quartile
 
 # Configuration
-CONTACT_EMAIL = "research@theeye.local"  # Replace with your email for polite API pools
+CONTACT_EMAIL = "theeye.research@gmail.com"  # Real email for OpenAlex/Crossref polite pools
 SEMANTIC_SCHOLAR_API_KEY: Optional[str] = None  # Set this for higher rate limits
 
 HTTP_TIMEOUT = 30.0
-USER_AGENT = "THEeye/1.0 (AI-Assisted Research Platform)"
+USER_AGENT = "THEeye/2.0 (AI-Assisted Research Platform; mailto:" + CONTACT_EMAIL + ")"
 
 
 # ---------------------------------------------------------------------------
@@ -785,13 +787,354 @@ def _apply_filters(papers: list[Paper], request: SearchRequest) -> list[Paper]:
     return filtered
 
 
+# ---------------------------------------------------------------------------
+# DOAJ - Directory of Open Access Journals (6M+ articles)
+# ---------------------------------------------------------------------------
+
+async def search_doaj(query: str, max_results: int = 25,
+                      year_from: int | None = None,
+                      year_to: int | None = None,
+                      client: httpx.AsyncClient | None = None) -> list[Paper]:
+    """Search DOAJ for open access articles."""
+    encoded_query = quote_plus(query)
+    page_size = min(max_results * 2, 50)
+    url = f"https://doaj.org/api/search/articles/{encoded_query}?page=1&pageSize={page_size}"
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+    try:
+        resp = await client.get(url)
+        if resp.status_code == 429:
+            print("[DOAJ] Rate limited (429).")
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[DOAJ] Error: {e}")
+        return []
+    finally:
+        if own_client:
+            await client.aclose()
+
+    papers = []
+    for item in data.get("results", []):
+        bibjson = item.get("bibjson", {}) or {}
+        links = bibjson.get("links", [])
+        oa_url = ""
+        for link in links:
+            if "pdf" in link.get("type", "").lower() or link.get("url", "").endswith(".pdf"):
+                oa_url = link.get("url", "")
+                break
+        if not oa_url and links:
+            oa_url = links[0].get("url", "")
+        if not oa_url:
+            continue
+
+        authors = [Author(name=a.get("name", "")) for a in bibjson.get("author", [])[:10] if a.get("name")]
+        journal_info = bibjson.get("journal", {}) or {}
+        year = None
+        ym = bibjson.get("year") or journal_info.get("year")
+        if ym:
+            try:
+                year = int(str(ym)[:4])
+            except (ValueError, TypeError):
+                pass
+        if year and year_from and year < year_from:
+            continue
+        if year and year_to and year > year_to:
+            continue
+
+        paper = Paper(
+            title=bibjson.get("title", "") or "",
+            authors=authors,
+            year=year,
+            journal=journal_info.get("title"),
+            doi=bibjson.get("identifier", {}).get("doi"),
+            abstract=bibjson.get("abstract"),
+            cited_by_count=0,
+            is_open_access=True,
+            oa_url=oa_url,
+            source_db="doaj",
+        )
+        papers.append(paper)
+    return papers
+
+
+# ---------------------------------------------------------------------------
+# arXiv (2.4M+ preprints, STEM fields)
+# ---------------------------------------------------------------------------
+
+async def search_arxiv(query: str, max_results: int = 25,
+                       year_from: int | None = None,
+                       year_to: int | None = None,
+                       client: httpx.AsyncClient | None = None) -> list[Paper]:
+    """Search arXiv for preprints."""
+    encoded_query = quote_plus(query)
+    max_fetch = min(max_results * 2, 30)
+    url = f"http://export.arxiv.org/api/query?search_query=all:{encoded_query}&start=0&max_results={max_fetch}"
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+    try:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            print(f"[arXiv] HTTP {resp.status_code}")
+            return []
+        xml_text = resp.text
+    except Exception as e:
+        print(f"[arXiv] Error: {e}")
+        return []
+    finally:
+        if own_client:
+            await client.aclose()
+
+    papers = []
+    try:
+        root = ET.fromstring(xml_text)
+        ns = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+        for entry in root.findall("atom:entry", ns):
+            title = entry.findtext("atom:title", "", ns).strip().replace("\n", " ")
+            summary = entry.findtext("atom:summary", "", ns).strip().replace("\n", " ")
+            published = entry.findtext("atom:published", "", ns)
+            year = None
+            if published:
+                try:
+                    year = int(published[:4])
+                except ValueError:
+                    pass
+            if year and year_from and year < year_from:
+                continue
+            if year and year_to and year > year_to:
+                continue
+
+            pdf_url = ""
+            oa_url = ""
+            for link in entry.findall("atom:link", ns):
+                lt = link.get("type", "")
+                lh = link.get("href", "")
+                if "pdf" in lt:
+                    pdf_url = lh
+                elif lh and not oa_url:
+                    oa_url = lh
+            if not pdf_url:
+                id_elem = entry.findtext("atom:id", "", ns)
+                if id_elem:
+                    aid = id_elem.split("/abs/")[-1] if "/abs/" in id_elem else id_elem.split("/")[-1]
+                    if aid:
+                        pdf_url = f"https://arxiv.org/pdf/{aid}.pdf"
+            if not oa_url:
+                oa_url = entry.findtext("atom:id", "", ns)
+            if not pdf_url and not oa_url:
+                continue
+
+            authors = []
+            for author in entry.findall("atom:author", ns)[:10]:
+                name = author.findtext("atom:name", "", ns)
+                if name:
+                    authors.append(Author(name=name))
+
+            doi = ""
+            doi_elem = entry.find("arxiv:doi", ns)
+            if doi_elem is not None:
+                doi = doi_elem.text or ""
+
+            paper = Paper(
+                title=title or "",
+                authors=authors,
+                year=year,
+                journal="arXiv preprint",
+                doi=doi or None,
+                abstract=summary or None,
+                cited_by_count=0,
+                is_open_access=True,
+                oa_url=pdf_url or oa_url,
+                source_db="arxiv",
+            )
+            papers.append(paper)
+    except ET.ParseError as e:
+        print(f"[arXiv] XML parse error: {e}")
+    return papers
+
+
+# ---------------------------------------------------------------------------
+# CORE (200M+ papers from repositories worldwide)
+# ---------------------------------------------------------------------------
+
+async def search_core(query: str, max_results: int = 25,
+                      year_from: int | None = None,
+                      year_to: int | None = None,
+                      client: httpx.AsyncClient | None = None) -> list[Paper]:
+    """Search CORE for open access research papers."""
+    params = {"q": query, "limit": min(max_results * 2, 50)}
+
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT})
+    try:
+        resp = await client.post("https://api.core.ac.uk/v3/search/works", json=params)
+        if resp.status_code == 429:
+            print("[CORE] Rate limited (429).")
+            return []
+        if resp.status_code != 200:
+            print(f"[CORE] HTTP {resp.status_code}")
+            return []
+        data = resp.json()
+    except Exception as e:
+        print(f"[CORE] Error: {e}")
+        return []
+    finally:
+        if own_client:
+            await client.aclose()
+
+    papers = []
+    results = data.get("results", []) if isinstance(data, dict) else []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        pdf_url = item.get("download_url") or ""
+        src_urls = item.get("source_fulltext_urls", [])
+        if isinstance(src_urls, list) and src_urls and not pdf_url:
+            pdf_url = src_urls[0]
+        landing_url = item.get("url") or ""
+        if not pdf_url and not landing_url:
+            continue
+        if not pdf_url:
+            pdf_url = landing_url
+
+        year = item.get("year_published") or item.get("year")
+        if year:
+            try:
+                year = int(year)
+            except (ValueError, TypeError):
+                year = None
+        if year and year_from and year < year_from:
+            continue
+        if year and year_to and year > year_to:
+            continue
+
+        authors = []
+        for a in (item.get("authors") or [])[:10]:
+            if isinstance(a, dict):
+                name = a.get("name", "")
+            else:
+                name = str(a)
+            if name:
+                authors.append(Author(name=name))
+
+        paper = Paper(
+            title=item.get("title", "") or "",
+            authors=authors,
+            year=year,
+            journal=item.get("publisher") or None,
+            doi=item.get("doi") or None,
+            abstract=item.get("abstract") or None,
+            cited_by_count=item.get("citation_count", 0),
+            is_open_access=True,
+            oa_url=pdf_url,
+            source_db="core",
+        )
+        papers.append(paper)
+    return papers
+
+
+# ---------------------------------------------------------------------------
+# Academia.edu (47M+ papers, link-based)
+# ---------------------------------------------------------------------------
+
+async def search_academia_edu(query: str, max_results: int = 25,
+                              year_from: int | None = None,
+                              year_to: int | None = None,
+                              client: httpx.AsyncClient | None = None) -> list[Paper]:
+    """Search Academia.edu. Since no public API exists, provides search links."""
+    encoded_query = quote_plus(query)
+    search_url = f"https://www.academia.edu/search?q={encoded_query}"
+
+    browser_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    own_client = client is None
+    if own_client:
+        client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": browser_ua}, follow_redirects=True)
+    try:
+        resp = await client.get(search_url, headers={"User-Agent": browser_ua})
+        if resp.status_code != 200:
+            # Return at least a link
+            return [Paper(
+                title=f"Search Academia.edu for: {query}",
+                authors=[],
+                year=None,
+                journal="Academia.edu",
+                abstract="Click to browse 47M+ papers on Academia.edu.",
+                cited_by_count=0,
+                is_open_access=True,
+                oa_url=search_url,
+                source_db="academia_edu",
+            )]
+        html = resp.text
+    except Exception as e:
+        print(f"[Academia.edu] Error: {e}")
+        return [Paper(
+            title=f"Search Academia.edu for: {query}",
+            authors=[],
+            year=None,
+            journal="Academia.edu",
+            abstract="Click to browse 47M+ papers on Academia.edu.",
+            cited_by_count=0,
+            is_open_access=True,
+            oa_url=search_url,
+            source_db="academia_edu",
+        )]
+    finally:
+        if own_client:
+            await client.aclose()
+
+    papers = []
+    paper_pattern = re.findall(r'href="(/Documents/[^"]+)"[^>]*>([^<]+)', html, re.IGNORECASE)
+    seen = set()
+    for link, title in paper_pattern[:max_results]:
+        title = title.strip()
+        if not title or title in seen:
+            continue
+        seen.add(title)
+        full_url = f"https://www.academia.edu{link}" if link.startswith("/") else link
+        papers.append(Paper(
+            title=title,
+            authors=[],
+            year=None,
+            journal="Academia.edu",
+            abstract="Paper from Academia.edu. Click to access full text.",
+            cited_by_count=0,
+            is_open_access=True,
+            oa_url=full_url,
+            source_db="academia_edu",
+        ))
+
+    if not papers or len(papers) < 3:
+        papers.append(Paper(
+            title=f"Browse more on Academia.edu: {query}",
+            authors=[],
+            year=None,
+            journal="Academia.edu",
+            abstract="Search Academia.edu (47M+ papers) for this topic.",
+            cited_by_count=0,
+            is_open_access=True,
+            oa_url=search_url,
+            source_db="academia_edu",
+        ))
+    return papers
+
+
 async def unified_search(request: SearchRequest) -> SearchResponse:
     """
     Search across multiple databases concurrently, deduplicate, filter,
     and return a unified result set sorted by citation count.
+
+    Supports: OpenAlex, Crossref, Semantic Scholar, Google Scholar,
+    EconPapers/RePEc, ERIC, CORE, DOAJ, arXiv, Academia.edu
+    Combined access: 300M+ papers across all research fields.
     """
     # Use a single shared client for all API requests (more efficient)
-    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}) as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as client:
         tasks = []
         task_dbs = []
 
@@ -819,6 +1162,22 @@ async def unified_search(request: SearchRequest) -> SearchResponse:
             tasks.append(search_eric(request.query, request.max_results,
                                      request.year_from, request.year_to, client=client))
             task_dbs.append("eric")
+        if "core" in request.databases:
+            tasks.append(search_core(request.query, request.max_results,
+                                     request.year_from, request.year_to, client=client))
+            task_dbs.append("core")
+        if "doaj" in request.databases:
+            tasks.append(search_doaj(request.query, request.max_results,
+                                     request.year_from, request.year_to, client=client))
+            task_dbs.append("doaj")
+        if "arxiv" in request.databases:
+            tasks.append(search_arxiv(request.query, request.max_results,
+                                      request.year_from, request.year_to, client=client))
+            task_dbs.append("arxiv")
+        if "academia_edu" in request.databases:
+            tasks.append(search_academia_edu(request.query, request.max_results,
+                                             request.year_from, request.year_to, client=client))
+            task_dbs.append("academia_edu")
 
         if not tasks:
             return SearchResponse(

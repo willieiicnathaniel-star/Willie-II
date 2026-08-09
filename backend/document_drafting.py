@@ -16,8 +16,16 @@ Supports:
 import httpx
 import asyncio
 import re
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import quote_plus, urlparse
+
+
+# Use a proper email for OpenAlex/Crossref polite pools (faster rate limits)
+CONTACT_EMAIL = "theeye.research@gmail.com"
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+PLATFORM_UA = "THEeye/2.0 (AI-Assisted Research Platform; mailto:" + CONTACT_EMAIL + ")"
 
 
 DISCLAIMER = (
@@ -594,23 +602,61 @@ def _suggest_journals(field_key, topic):
 
 # ---------------------------------------------------------------------------
 # Open Access Article Finder
+# Searches: OpenAlex (240M+) + Semantic Scholar (200M+) + CORE (200M+)
+#           + DOAJ (6M+) + arXiv (2.4M+) + Crossref OA (150M+)
+#           + Academia.edu (47M+) link provider
+# Combined access: 300M+ unique papers across all research fields
 # ---------------------------------------------------------------------------
 
+# List of all sources for UI display
+OA_SOURCES = [
+    {"id": "openalex", "name": "OpenAlex", "papers": "240M+", "note": "Global research works"},
+    {"id": "semantic_scholar", "name": "Semantic Scholar", "papers": "200M+", "note": "AI-powered paper search"},
+    {"id": "core", "name": "CORE", "papers": "200M+", "note": "Open access repositories"},
+    {"id": "crossref", "name": "Crossref", "papers": "150M+", "note": "DOI registry"},
+    {"id": "doaj", "name": "DOAJ", "papers": "6M+", "note": "Open access journals"},
+    {"id": "arxiv", "name": "arXiv", "papers": "2.4M+", "note": "Preprints (STEM)"},
+    {"id": "academia_edu", "name": "Academia.edu", "papers": "47M+", "note": "Academic papers platform"},
+]
+
+
 async def find_open_access_articles(topic: str, max_results: int = 15) -> dict:
-    """Search for open access articles related to a topic using OpenAlex and Semantic Scholar."""
+    """Search for open access articles across multiple sources.
+
+    Aggregates results from OpenAlex, Semantic Scholar, CORE, DOAJ, arXiv,
+    Crossref (OA filter), and Academia.edu to provide access to 300M+ papers.
+    """
     articles = []
 
-    async with httpx.AsyncClient(timeout=30.0, headers={"User-Agent": "THEeye/2.0"}) as client:
+    async with httpx.AsyncClient(
+        timeout=45.0,
+        headers={"User-Agent": PLATFORM_UA},
+        follow_redirects=True,
+    ) as client:
         tasks = [
             _search_openalex_oa(topic, max_results, client),
             _search_s2_oa(topic, max_results, client),
+            _search_core_oa(topic, max_results, client),
+            _search_doaj_oa(topic, max_results, client),
+            _search_arxiv_oa(topic, max_results, client),
+            _search_crossref_oa(topic, max_results, client),
+            _search_academia_edu(topic, max_results, client),
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    for result in results:
+    # Track which sources returned results
+    sources_searched = []
+    sources_succeeded = []
+    source_names = ["OpenAlex", "Semantic Scholar", "CORE", "DOAJ", "arXiv", "Crossref", "Academia.edu"]
+    for i, result in enumerate(results):
+        source_name = source_names[i] if i < len(source_names) else f"Source_{i}"
+        sources_searched.append(source_name)
         if isinstance(result, Exception):
+            print(f"[OA {source_name}] Exception: {result}")
             continue
-        articles.extend(result)
+        if isinstance(result, list) and len(result) > 0:
+            sources_succeeded.append(source_name)
+            articles.extend(result)
 
     # Deduplicate by DOI or title
     seen = set()
@@ -621,24 +667,30 @@ async def find_open_access_articles(topic: str, max_results: int = 15) -> dict:
             seen.add(key)
             unique.append(a)
 
-    # Sort by citation count
-    unique.sort(key=lambda x: x.get("cited_by_count", 0), reverse=True)
+    # Sort by citation count (fall back to year for ties)
+    unique.sort(key=lambda x: (x.get("cited_by_count", 0), x.get("year") or 0), reverse=True)
     unique = unique[:max_results]
 
     return {
         "topic": topic,
         "total_found": len(unique),
         "articles": unique,
+        "sources_searched": sources_searched,
+        "sources_succeeded": sources_succeeded,
         "search_timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
+
+# ---------------------------------------------------------------------------
+# Source 1: OpenAlex (240M+ works)
+# ---------------------------------------------------------------------------
 
 async def _search_openalex_oa(query, max_results, client):
     """Search OpenAlex for open access works with PDF URLs."""
     params = {
         "search": query,
-        "per-page": min(max_results * 3, 75),  # Request more since we filter for real PDF URLs
-        "mailto": "research@theeye.local",
+        "per-page": min(max_results * 3, 75),
+        "mailto": CONTACT_EMAIL,
         "filter": "is_oa:true",
     }
     try:
@@ -651,17 +703,13 @@ async def _search_openalex_oa(query, max_results, client):
 
     articles = []
     for work in data.get("results", []):
-        # ---- Find a real PDF URL from all available locations ----
-        # OpenAlex provides multiple OA locations; we need an actual pdf_url, not a landing page
         best_oa = work.get("best_oa_location", {}) or {}
         pdf_url = best_oa.get("pdf_url")
 
-        # If best_oa_location has no pdf_url, check primary_location
         if not pdf_url:
             primary_loc = work.get("primary_location", {}) or {}
             pdf_url = primary_loc.get("pdf_url")
 
-        # If still no pdf_url, check all locations array for one that has a pdf_url
         if not pdf_url:
             for loc in work.get("locations", []) or []:
                 loc_pdf = loc.get("pdf_url")
@@ -669,12 +717,9 @@ async def _search_openalex_oa(query, max_results, client):
                     pdf_url = loc_pdf
                     break
 
-        # If we still don't have a real PDF URL, skip this article
-        # (landing_page_url is an HTML page, not a downloadable PDF)
         if not pdf_url:
             continue
 
-        # landing_page_url is for the "Open in Browser" button (may be HTML)
         landing_url = best_oa.get("landing_page_url") or pdf_url
 
         authors = []
@@ -701,20 +746,24 @@ async def _search_openalex_oa(query, max_results, client):
     return articles
 
 
+# ---------------------------------------------------------------------------
+# Source 2: Semantic Scholar (200M+ papers)
+# ---------------------------------------------------------------------------
+
 async def _search_s2_oa(query, max_results, client):
     """Search Semantic Scholar for open access papers."""
     params = {
         "query": query,
-        "limit": min(max_results, 25),
+        "limit": min(max_results * 2, 50),
         "fields": "title,abstract,authors,year,citationCount,journal,externalIds,openAccessPdf",
     }
-    headers = {"User-Agent": "THEeye/2.0"}
     try:
         resp = await client.get(
             "https://api.semanticscholar.org/graph/v1/paper/search",
-            params=params, headers=headers,
+            params=params,
         )
         if resp.status_code == 429:
+            print("[OA S2] Rate limited (429). Returning empty.")
             return []
         resp.raise_for_status()
         data = resp.json()
@@ -748,6 +797,462 @@ async def _search_s2_oa(query, max_results, client):
     return articles
 
 
+# ---------------------------------------------------------------------------
+# Source 3: CORE (200M+ papers from repositories worldwide)
+# ---------------------------------------------------------------------------
+
+async def _search_core_oa(query, max_results, client):
+    """Search CORE for open access research papers."""
+    # CORE v3 API - uses query parameter
+    params = {
+        "q": query,
+        "limit": min(max_results * 2, 50),
+    }
+    headers = {"User-Agent": PLATFORM_UA}
+    try:
+        resp = await client.post(
+            "https://api.core.ac.uk/v3/search/works",
+            json=params,
+            headers=headers,
+            timeout=30.0,
+        )
+        if resp.status_code == 429:
+            print("[OA CORE] Rate limited (429).")
+            return []
+        if resp.status_code != 200:
+            print(f"[OA CORE] HTTP {resp.status_code}")
+            return []
+        data = resp.json()
+    except Exception as e:
+        print(f"[OA CORE] Error: {e}")
+        return []
+
+    articles = []
+    results = data.get("results", []) if isinstance(data, dict) else []
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+
+        # CORE provides download URLs for full text
+        pdf_url = item.get("download_url") or ""
+        source_url = item.get("source_fulltext_urls", [])
+        if isinstance(source_url, list) and source_url and not pdf_url:
+            pdf_url = source_url[0]
+
+        # If no direct PDF, use the landing page URL
+        landing_url = item.get("url") or ""
+
+        if not pdf_url and not landing_url:
+            continue
+
+        # If pdf_url is not a real PDF link but landing_url exists, use landing_url
+        if not pdf_url and landing_url:
+            pdf_url = landing_url
+
+        authors_raw = item.get("authors", [])
+        authors = []
+        if isinstance(authors_raw, list):
+            for a in authors_raw[:5]:
+                if isinstance(a, dict):
+                    name = a.get("name", "")
+                else:
+                    name = str(a)
+                if name:
+                    authors.append(name)
+
+        articles.append({
+            "title": item.get("title", "Untitled"),
+            "authors": authors,
+            "year": item.get("year_published") or item.get("year"),
+            "journal": item.get("publisher", ""),
+            "doi": item.get("doi", ""),
+            "abstract": item.get("abstract", ""),
+            "cited_by_count": item.get("citation_count", 0),
+            "is_open_access": True,
+            "pdf_url": pdf_url,
+            "oa_url": landing_url or pdf_url,
+            "source": "CORE",
+            "license": item.get("license", ""),
+        })
+    return articles
+
+
+# ---------------------------------------------------------------------------
+# Source 4: DOAJ - Directory of Open Access Journals (6M+ articles)
+# ---------------------------------------------------------------------------
+
+async def _search_doaj_oa(query, max_results, client):
+    """Search DOAJ for open access articles."""
+    encoded_query = quote_plus(query)
+    page_size = min(max_results * 2, 50)
+    url = f"https://doaj.org/api/search/articles/{encoded_query}?page=1&pageSize={page_size}"
+
+    try:
+        resp = await client.get(url, timeout=30.0)
+        if resp.status_code == 429:
+            print("[OA DOAJ] Rate limited (429).")
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[OA DOAJ] Error: {e}")
+        return []
+
+    articles = []
+    for item in data.get("results", []):
+        bibjson = item.get("bibjson", {}) or {}
+
+        # DOAJ provides links array with fulltext URLs
+        links = bibjson.get("links", [])
+        pdf_url = ""
+        landing_url = ""
+        for link in links:
+            link_type = link.get("type", "").lower()
+            link_url = link.get("url", "")
+            if "pdf" in link_type or link_url.endswith(".pdf"):
+                pdf_url = link_url
+            elif not landing_url:
+                landing_url = link_url
+
+        if not pdf_url and not landing_url:
+            continue
+
+        if not pdf_url:
+            pdf_url = landing_url
+
+        authors = []
+        for a in bibjson.get("author", [])[:5]:
+            name = a.get("name", "")
+            if name:
+                authors.append(name)
+
+        journal_info = bibjson.get("journal", {}) or {}
+        year = None
+        year_month = bibjson.get("year") or journal_info.get("year")
+        if year_month:
+            try:
+                year = int(str(year_month)[:4])
+            except (ValueError, TypeError):
+                year = None
+
+        articles.append({
+            "title": bibjson.get("title", "Untitled"),
+            "authors": authors,
+            "year": year,
+            "journal": journal_info.get("title", ""),
+            "doi": bibjson.get("identifier", {}).get("doi", ""),
+            "abstract": bibjson.get("abstract", ""),
+            "cited_by_count": 0,
+            "is_open_access": True,
+            "pdf_url": pdf_url,
+            "oa_url": landing_url or pdf_url,
+            "source": "DOAJ",
+            "license": journal_info.get("license", [{}])[0].get("type", "") if journal_info.get("license") else "",
+        })
+    return articles
+
+
+# ---------------------------------------------------------------------------
+# Source 5: arXiv (2.4M+ preprints, STEM fields)
+# ---------------------------------------------------------------------------
+
+async def _search_arxiv_oa(query, max_results, client):
+    """Search arXiv for preprints with PDF downloads."""
+    encoded_query = quote_plus(query)
+    max_fetch = min(max_results * 2, 30)
+    url = f"http://export.arxiv.org/api/query?search_query=all:{encoded_query}&start=0&max_results={max_fetch}"
+
+    try:
+        resp = await client.get(url, timeout=30.0)
+        if resp.status_code != 200:
+            print(f"[OA arXiv] HTTP {resp.status_code}")
+            return []
+        xml_text = resp.text
+    except Exception as e:
+        print(f"[OA arXiv] Error: {e}")
+        return []
+
+    articles = []
+    try:
+        root = ET.fromstring(xml_text)
+        # arXiv uses Atom namespace
+        ns = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+
+        for entry in root.findall("atom:entry", ns):
+            title = entry.findtext("atom:title", "", ns).strip().replace("\n", " ")
+            summary = entry.findtext("atom:summary", "", ns).strip().replace("\n", " ")
+            published = entry.findtext("atom:published", "", ns)
+            year = None
+            if published:
+                try:
+                    year = int(published[:4])
+                except ValueError:
+                    pass
+
+            # arXiv PDF link
+            pdf_url = ""
+            landing_url = ""
+            for link in entry.findall("atom:link", ns):
+                link_type = link.get("type", "")
+                link_href = link.get("href", "")
+                if "pdf" in link_type:
+                    pdf_url = link_href
+                elif link_href and not landing_url:
+                    landing_url = link_href
+
+            if not pdf_url:
+                # arXiv always has PDF at /pdf/ endpoint
+                arxiv_id = ""
+                id_elem = entry.findtext("atom:id", "", ns)
+                if id_elem:
+                    arxiv_id = id_elem.split("/abs/")[-1] if "/abs/" in id_elem else id_elem.split("/")[-1]
+                if arxiv_id:
+                    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+
+            if not landing_url:
+                landing_url = entry.findtext("atom:id", "", ns)
+
+            if not pdf_url and not landing_url:
+                continue
+
+            authors = []
+            for author in entry.findall("atom:author", ns)[:5]:
+                name = author.findtext("atom:name", "", ns)
+                if name:
+                    authors.append(name)
+
+            # Extract DOI if present
+            doi = ""
+            doi_elem = entry.find("arxiv:doi", ns)
+            if doi_elem is not None:
+                doi = doi_elem.text or ""
+
+            articles.append({
+                "title": title or "Untitled",
+                "authors": authors,
+                "year": year,
+                "journal": "arXiv preprint",
+                "doi": doi,
+                "abstract": summary,
+                "cited_by_count": 0,
+                "is_open_access": True,
+                "pdf_url": pdf_url,
+                "oa_url": landing_url or pdf_url,
+                "source": "arXiv",
+                "license": "arXiv",
+            })
+    except ET.ParseError as e:
+        print(f"[OA arXiv] XML parse error: {e}")
+        return []
+
+    return articles
+
+
+# ---------------------------------------------------------------------------
+# Source 6: Crossref (150M+ records, OA filtered)
+# ---------------------------------------------------------------------------
+
+async def _search_crossref_oa(query, max_results, client):
+    """Search Crossref for open access articles with license info."""
+    params = {
+        "query": query,
+        "rows": min(max_results * 2, 50),
+        "mailto": CONTACT_EMAIL,
+        "select": "DOI,title,author,published-print,published-online,container-title,abstract,is-referenced-by-count,license,link",
+    }
+    try:
+        resp = await client.get("https://api.crossref.org/works", params=params, timeout=30.0)
+        if resp.status_code == 429:
+            print("[OA Crossref] Rate limited (429).")
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"[OA Crossref] Error: {e}")
+        return []
+
+    articles = []
+    for item in data.get("message", {}).get("items", []):
+        # Check for OA license (Creative Commons, etc.)
+        licenses = item.get("license", []) or []
+        is_oa = any(
+            "creativecommons" in lic.get("URL", "").lower()
+            for lic in licenses
+        )
+        if not is_oa:
+            continue
+
+        # Try to find a full-text PDF link
+        pdf_url = ""
+        links = item.get("link", []) or []
+        for link in links:
+            content_type = link.get("content-type", "").lower()
+            if "pdf" in content_type:
+                pdf_url = link.get("URL", "")
+                break
+
+        if not pdf_url and links:
+            # Use first available full-text link
+            pdf_url = links[0].get("URL", "")
+
+        if not pdf_url:
+            continue
+
+        title_list = item.get("title", [])
+        title = title_list[0] if title_list else "Untitled"
+
+        authors = []
+        for a in item.get("author", [])[:5]:
+            given = a.get("given", "")
+            family = a.get("family", "")
+            name = f"{given} {family}".strip()
+            if name:
+                authors.append(name)
+
+        year = None
+        date_obj = item.get("published-print") or item.get("published-online") or {}
+        date_parts = date_obj.get("date-parts", [[]])
+        if date_parts and date_parts[0]:
+            year = date_parts[0][0]
+
+        container = item.get("container-title", [])
+        journal = container[0] if container else ""
+
+        # Clean abstract (Crossref wraps in <jats:p> tags)
+        abstract = item.get("abstract", "")
+        if abstract:
+            abstract = re.sub(r'<[^>]+>', '', abstract)
+
+        articles.append({
+            "title": title,
+            "authors": authors,
+            "year": year,
+            "journal": journal,
+            "doi": item.get("DOI", ""),
+            "abstract": abstract,
+            "cited_by_count": item.get("is-referenced-by-count", 0),
+            "is_open_access": True,
+            "pdf_url": pdf_url,
+            "oa_url": pdf_url,
+            "source": "Crossref",
+        })
+    return articles
+
+
+# ---------------------------------------------------------------------------
+# Source 7: Academia.edu (47M+ papers, link-based search)
+# ---------------------------------------------------------------------------
+
+async def _search_academia_edu(query, max_results, client):
+    """Search Academia.edu for papers.
+
+    Academia.edu does not provide a public REST API. We use their search page
+    and extract results. If scraping fails, we provide a direct search link
+    so users can access the source directly.
+    """
+    encoded_query = quote_plus(query)
+    search_url = f"https://www.academia.edu/search?q={encoded_query}"
+
+    # Try to fetch the search page and extract paper links
+    headers = {"User-Agent": BROWSER_UA}
+    try:
+        resp = await client.get(search_url, headers=headers, timeout=20.0)
+        if resp.status_code != 200:
+            print(f"[OA Academia.edu] HTTP {resp.status_code}")
+            # Still return a search link so users can access the source
+            return [{
+                "title": f"Search Academia.edu for: {query}",
+                "authors": [],
+                "year": None,
+                "journal": "Academia.edu",
+                "doi": "",
+                "abstract": f"Click 'Open in Browser' to search Academia.edu (47M+ papers) for this topic.",
+                "cited_by_count": 0,
+                "is_open_access": True,
+                "pdf_url": "",
+                "oa_url": search_url,
+                "source": "Academia.edu",
+                "license": "",
+            }]
+
+        html = resp.text
+        articles = []
+
+        # Try to extract paper titles and links from the search results
+        # Academia.edu search results contain data in JSON or HTML structure
+        # Pattern: look for links to /documents/ or /Attachments/
+        paper_pattern = re.findall(
+            r'href="(/Documents/[^"]+)"[^>]*>([^<]+)',
+            html, re.IGNORECASE
+        )
+        if not paper_pattern:
+            # Alternative pattern for newer Academia.edu layout
+            paper_pattern = re.findall(
+                r'"(?:title|name)":\s*"([^"]+)".*?"(?:url|link)":\s*"(/Documents/[^"]+)"',
+                html, re.IGNORECASE
+            )
+
+        seen_titles = set()
+        for link, title in paper_pattern[:max_results]:
+            title = title.strip()
+            if not title or title in seen_titles:
+                continue
+            seen_titles.add(title)
+            full_url = f"https://www.academia.edu{link}" if link.startswith("/") else link
+
+            articles.append({
+                "title": title,
+                "authors": [],
+                "year": None,
+                "journal": "Academia.edu",
+                "doi": "",
+                "abstract": "Paper from Academia.edu. Click to access the full text.",
+                "cited_by_count": 0,
+                "is_open_access": True,
+                "pdf_url": "",
+                "oa_url": full_url,
+                "source": "Academia.edu",
+                "license": "",
+            })
+
+        # Always include the search link as the last result
+        if not articles or len(articles) < 3:
+            articles.append({
+                "title": f"Browse more results on Academia.edu for: {query}",
+                "authors": [],
+                "year": None,
+                "journal": "Academia.edu",
+                "doi": "",
+                "abstract": f"Search Academia.edu (47M+ papers) for this topic. Opens in a new tab.",
+                "cited_by_count": 0,
+                "is_open_access": True,
+                "pdf_url": "",
+                "oa_url": search_url,
+                "source": "Academia.edu",
+                "license": "",
+            })
+
+        return articles
+
+    except Exception as e:
+        print(f"[OA Academia.edu] Error: {e}")
+        # Return at least a search link
+        return [{
+            "title": f"Search Academia.edu for: {query}",
+            "authors": [],
+            "year": None,
+            "journal": "Academia.edu",
+            "doi": "",
+            "abstract": f"Click 'Open in Browser' to search Academia.edu (47M+ papers) for this topic.",
+            "cited_by_count": 0,
+            "is_open_access": True,
+            "pdf_url": "",
+            "oa_url": search_url,
+            "source": "Academia.edu",
+            "license": "",
+        }]
+
+
 def _reconstruct_abstract(inverted_index):
     if not inverted_index:
         return None
@@ -770,7 +1275,7 @@ async def download_pdf(url: str) -> tuple:
       - Retries with SSL verification disabled as a fallback
     """
     browser_headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "User-Agent": BROWSER_UA,
         "Accept": "application/pdf,*/*",
         "Accept-Language": "en-US,en;q=0.9",
     }
@@ -898,7 +1403,6 @@ def _resolve_url(url: str, base_url: str) -> str:
         return "https:" + url
     if url.startswith("/"):
         # Get the origin from base_url
-        from urllib.parse import urlparse
         parsed = urlparse(base_url)
         return f"{parsed.scheme}://{parsed.netloc}{url}"
     # Relative path

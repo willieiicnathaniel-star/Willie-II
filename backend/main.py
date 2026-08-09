@@ -85,6 +85,7 @@ from .models import DocumentExportRequest
 from .document_drafting import (
     generate_roadmap, get_document_types, get_research_fields,
     suggest_research_topics, find_open_access_articles, download_pdf,
+    OA_SOURCES,
 )
 from .models import (
     RoadmapRequest, RoadmapResponse,
@@ -1332,6 +1333,12 @@ async def drafting_download_pdf(request: DownloadPdfRequest, user=Depends(requir
         return Response(content=content, media_type=content_type, headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF download failed: {str(e)}")
+
+
+@app.get("/api/drafting/oa-sources")
+async def drafting_oa_sources(user=Depends(require_auth)):
+    """Return the list of open-access paper sources with paper counts."""
+    return {"sources": OA_SOURCES, "total_papers": "300M+"}
 
 
 # ---------------------------------------------------------------------------
