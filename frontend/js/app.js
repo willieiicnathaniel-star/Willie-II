@@ -778,7 +778,9 @@ async function verifyTextFormat() {
 
 function renderVerifyResults(data) {
     const container = document.getElementById('verifyResults');
+    if (!container) return;
 
+    // Safety guards: ensure all expected properties exist
     const wordCount = data.word_count || 0;
     const sentenceCount = data.sentence_count || 0;
     const avgSentLen = data.avg_sentence_length || 'N/A';
@@ -2734,7 +2736,7 @@ async function verifyCitations() {
         hideStatus('verifyCiteStatus');
         showStatus('verifyCiteStatus', data.summary, data.all_correct ? 'success' : (data.total_citations_found === 0 ? 'error' : 'loading'));
         if (data.all_correct) setTimeout(() => hideStatus('verifyCiteStatus'), 6000);
-        renderVerifyResults(data);
+        renderCitationVerifyResults(data);
     } catch (err) {
         showStatus('verifyCiteStatus', `Verification failed: ${err.message}`, 'error');
     } finally {
@@ -2787,10 +2789,18 @@ function parseReferenceList(text) {
     return refs;
 }
 
-function renderVerifyResults(data) {
+function renderCitationVerifyResults(data) {
     const container = document.getElementById('verifyCiteResults');
+    if (!container) return;
 
-    if (data.total_citations_found === 0) {
+    // Safety guards: ensure all expected arrays exist
+    const matched = data.matched || [];
+    const orphanCitations = data.orphan_citations || [];
+    const uncitedReferences = data.uncited_references || [];
+    const mismatches = data.mismatches || [];
+    const totalCitations = data.total_citations_found || 0;
+
+    if (totalCitations === 0) {
         container.innerHTML = `
             <div class="verify-result-card">
                 <div class="verify-result-header has-issues">
@@ -2813,10 +2823,10 @@ function renderVerifyResults(data) {
     // Build stats bar
     const statsHtml = `
         <div class="verify-result-stats">
-            <div class="verify-stat matched"><span class="stat-num">${data.matched.length}</span> Matched</div>
-            <div class="verify-stat orphan"><span class="stat-num">${data.orphan_citations.length}</span> Orphan Citation(s)</div>
-            <div class="verify-stat uncited"><span class="stat-num">${data.uncited_references.length}</span> Uncited Reference(s)</div>
-            <div class="verify-stat mismatch"><span class="stat-num">${data.mismatches.length}</span> Mismatch(es)</div>
+            <div class="verify-stat matched"><span class="stat-num">${matched.length}</span> Matched</div>
+            <div class="verify-stat orphan"><span class="stat-num">${orphanCitations.length}</span> Orphan Citation(s)</div>
+            <div class="verify-stat uncited"><span class="stat-num">${uncitedReferences.length}</span> Uncited Reference(s)</div>
+            <div class="verify-stat mismatch"><span class="stat-num">${mismatches.length}</span> Mismatch(es)</div>
         </div>
     `;
 
@@ -2824,10 +2834,10 @@ function renderVerifyResults(data) {
     let issuesHtml = '';
 
     // Orphan citations
-    if (data.orphan_citations.length > 0) {
+    if (orphanCitations.length > 0) {
         issuesHtml += `<div class="verify-issues-list">
             <div class="verify-issues-list-title">&#9888; Orphan Citations (in text but not in references)</div>`;
-        for (const oc of data.orphan_citations) {
+        for (const oc of orphanCitations) {
             issuesHtml += `
                 <div class="verify-issue-item orphan">
                     <span class="verify-issue-icon">&#10006;</span>
@@ -2845,10 +2855,10 @@ function renderVerifyResults(data) {
     }
 
     // Mismatches
-    if (data.mismatches.length > 0) {
+    if (mismatches.length > 0) {
         issuesHtml += `<div class="verify-issues-list">
             <div class="verify-issues-list-title">&#9888; Citation Mismatches (details don't match reference)</div>`;
-        for (const mm of data.mismatches) {
+        for (const mm of mismatches) {
             issuesHtml += `
                 <div class="verify-issue-item mismatch">
                     <span class="verify-issue-icon">&#9888;</span>
@@ -2867,10 +2877,10 @@ function renderVerifyResults(data) {
     }
 
     // Uncited references
-    if (data.uncited_references.length > 0) {
+    if (uncitedReferences.length > 0) {
         issuesHtml += `<div class="verify-issues-list">
             <div class="verify-issues-list-title">&#9888; Uncited References (in list but never cited in text)</div>`;
-        for (const ur of data.uncited_references) {
+        for (const ur of uncitedReferences) {
             issuesHtml += `
                 <div class="verify-issue-item uncited">
                     <span class="verify-issue-icon">&#8505;</span>
@@ -2886,10 +2896,10 @@ function renderVerifyResults(data) {
     }
 
     // Matched citations (collapsible)
-    if (data.matched.length > 0) {
+    if (matched.length > 0) {
         issuesHtml += `<div class="verify-matched-list">
-            <div class="verify-issues-list-title" style="color:var(--success);">&#9989; Correctly Matched Citations (${data.matched.length})</div>`;
-        for (const m of data.matched) {
+            <div class="verify-issues-list-title" style="color:var(--success);">&#9989; Correctly Matched Citations (${matched.length})</div>`;
+        for (const m of matched) {
             issuesHtml += `
                 <div class="verify-matched-item">
                     <span class="check-icon">&#10003;</span>
