@@ -6,11 +6,14 @@ Supports models with FREE API tiers:
   - Groq           (Llama 3.3 70B, Mixtral 8x7B, Gemma 2)
   - DeepSeek       (deepseek-chat, deepseek-coder)
   - Mistral AI     (mistral-small-latest, mistral-tiny)
-  - Qwen / DashScope (qwen-turbo, qwen-plus)
+  - Qwen / DashScope (qwen-max, qwen-plus, qwen-turbo)
 
 Also supports PAID models (require API keys):
-  - OpenAI         (gpt-5, gpt-4o)
-  - Anthropic      (claude-3-5-sonnet, claude-3-opus)
+  - OpenAI         (gpt-5, gpt-5-mini, gpt-4o)
+  - Anthropic      (claude-sonnet-4, claude-3-5-sonnet, claude-3-haiku)
+
+Academic drafting priority: Claude Sonnet 4 > GPT-5 > Qwen-Max >
+  Claude 3.5 Sonnet > GPT-4o > Qwen-Plus > DeepSeek > Gemini > Groq > Mistral
 
 Auto-routing: Each task type has a preferred model priority order.
 Fallback: If a model fails (rate limit, error, no key), tries the next.
@@ -62,7 +65,7 @@ PROVIDERS = {
         "display_name": "Qwen (Alibaba DashScope)",
         "env_key": "DASHSCOPE_API_KEY",
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "models": ["qwen-turbo", "qwen-plus"],
+        "models": ["qwen-max", "qwen-plus", "qwen-turbo"],
         "free_tier": True,
         "api_style": "openai",
     },
@@ -70,7 +73,7 @@ PROVIDERS = {
         "display_name": "OpenAI (GPT-5)",
         "env_key": "OPENAI_API_KEY",
         "base_url": "https://api.openai.com/v1",
-        "models": ["gpt-4o", "gpt-4o-mini"],
+        "models": ["gpt-5", "gpt-5-mini", "gpt-4o"],
         "free_tier": False,
         "api_style": "openai",
     },
@@ -78,7 +81,7 @@ PROVIDERS = {
         "display_name": "Anthropic (Claude)",
         "env_key": "ANTHROPIC_API_KEY",
         "base_url": "https://api.anthropic.com/v1",
-        "models": ["claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],
+        "models": ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-haiku-20240307"],
         "free_tier": False,
         "api_style": "anthropic",
     },
@@ -90,13 +93,16 @@ PROVIDERS = {
 
 TASK_ROUTING = {
     "academic_drafting": [
+        ("anthropic", "claude-sonnet-4-20250514"),
+        ("openai", "gpt-5"),
+        ("qwen", "qwen-max"),
+        ("anthropic", "claude-3-5-sonnet-20241022"),
+        ("openai", "gpt-4o"),
+        ("qwen", "qwen-plus"),
         ("deepseek", "deepseek-chat"),
         ("gemini", "gemini-1.5-pro"),
         ("groq", "llama-3.3-70b-versatile"),
         ("mistral", "mistral-small-latest"),
-        ("qwen", "qwen-plus"),
-        ("openai", "gpt-4o"),
-        ("anthropic", "claude-3-5-sonnet-20241022"),
     ],
     "topic_suggestion": [
         ("groq", "llama-3.3-70b-versatile"),
@@ -136,13 +142,16 @@ TASK_ROUTING = {
         ("groq", "llama-3.3-70b-versatile"),
     ],
     "quick_generate": [
+        ("anthropic", "claude-sonnet-4-20250514"),
+        ("openai", "gpt-5"),
+        ("qwen", "qwen-max"),
+        ("anthropic", "claude-3-5-sonnet-20241022"),
+        ("openai", "gpt-4o"),
+        ("qwen", "qwen-plus"),
         ("deepseek", "deepseek-chat"),
         ("gemini", "gemini-1.5-pro"),
         ("groq", "llama-3.3-70b-versatile"),
         ("mistral", "mistral-small-latest"),
-        ("qwen", "qwen-plus"),
-        ("openai", "gpt-4o"),
-        ("anthropic", "claude-3-5-sonnet-20241022"),
     ],
     "general": [
         ("gemini", "gemini-2.0-flash"),
@@ -161,6 +170,12 @@ SYSTEM_PROMPTS = {
     "academic_drafting": (
         "You are an expert academic writer producing publication-quality text "
         "suitable for Q1–Q3 indexed journals. Follow these rules strictly:\n\n"
+        "0. OUTPUT DISCIPLINE (CRITICAL): Do NOT repeat, echo, paraphrase, or "
+        "reference the prompt or instructions. Do NOT include preambles such as "
+        "'Here is...' or 'Sure, I'll write...'. Do NOT include postambles such as "
+        "'Let me know...' or 'I hope this helps.' Start DIRECTLY with the ## "
+        "heading of the academic content. End with the last paragraph of content "
+        "— no closing remarks.\n"
         "1. STRUCTURE: Use Markdown headings to organize content hierarchically:\n"
         "   - ## for the main section title (e.g., ## Literature Review: [Topic])\n"
         "   - ### for thematic sub-sections (e.g., ### Institutional Quality and Growth)\n"
@@ -186,7 +201,7 @@ SYSTEM_PROMPTS = {
         "Q1–Q3 indexed journals: precise operational definitions, attention "
         "to methodological quality, awareness of limitations, and engagement "
         "with theoretical frameworks.\n"
-        "Return the text in Markdown format with proper heading hierarchy."
+        "Return ONLY the academic text in Markdown format. No meta-commentary."
     ),
     "topic_suggestion": (
         "You are a research advisor helping a scholar identify novel research "
@@ -221,10 +236,13 @@ SYSTEM_PROMPTS = {
         "comments explaining each step. Return the code in a Markdown code block."
     ),
     "quick_generate": (
-        "You are an expert academic researcher and writer. Based on the user's "
-        "prompt and the provided search results, generate a well-structured "
-        "academic text with in-text citations (APA format). Only cite the "
-        "sources provided. Return the text in Markdown format."
+        "You are an expert academic researcher and writer. Using the provided "
+        "search results, generate a well-structured academic text with in-text "
+        "citations (APA format). Only cite the sources provided.\n\n"
+        "CRITICAL: Do NOT repeat, echo, or reference the prompt. Do NOT include "
+        "preambles ('Here is...', 'Certainly...') or postambles ('Let me know...'). "
+        "Start DIRECTLY with the ## heading. Return ONLY the academic text in "
+        "Markdown format."
     ),
     "general": (
         "You are a knowledgeable AI assistant. Respond clearly and concisely "
@@ -435,9 +453,14 @@ async def _call_openai_compatible(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
     }
+
+    # OpenAI GPT-5+ uses max_completion_tokens; other providers use max_tokens
+    if provider == "openai":
+        body["max_completion_tokens"] = max_tokens
+    else:
+        body["max_tokens"] = max_tokens
+    body["temperature"] = temperature
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(f"{base_url}/chat/completions", json=body, headers=headers)
@@ -520,6 +543,142 @@ async def _call_anthropic(
 
 
 # ---------------------------------------------------------------------------
+# Output Cleaning — strip echoed prompts, preambles, and postambles
+# ---------------------------------------------------------------------------
+
+import re as _re
+
+# Patterns that indicate a preamble line the AI should not have produced
+_PREAMBLE_PATTERNS = [
+    r"^(here\s+is|below\s+is|sure[,!]|certainly[,!]|of\s+course[,!]|"
+    r"i['']ll\s+write|i\s+will\s+write|let\s+me\s+write|"
+    r"this\s+is\s+(?:a|an)\s|following\s+is\s+(?:a|an)\s|"
+    r"based\s+on\s+(?:the\s+)?(?:provided\s+)?(?:sources|context|search))",
+    r"^(write\s+(?:a|an)\s+\w+.*(?:about|on|regarding)\s*:?)",
+    r"^(topic\s*:\s*.{3,})",
+    r"^(section\s*:\s*.{3,})",
+    r"^(target\s+length\s*:)",
+    r"^(requirements?\s*:)",
+    r"^(structure\s+for\s+)",
+    r"^(use\s+the\s+following\s+sources)",
+]
+
+# Patterns that indicate a postamble line
+_POSTAMBLE_PATTERNS = [
+    r"^(let\s+me\s+know\s+if)",
+    r"^(i\s+hope\s+this\s+helps)",
+    r"^(please\s+(?:note|review|let\s+me\s+know))",
+    r"^(feel\s+free\s+to)",
+    r"^(note\s*:\s*(?:this|the|all|please))",
+    r"^(disclaimer\s*:\s*)",
+    r"^(this\s+(?:text|content|draft)\s+(?:was|is)\s+(?:generated|ai))",
+    r"^(if\s+you\s+(?:need|want|have))",
+    r"^(would\s+you\s+like\s+me)",
+    r"^(i\s+can\s+(?:also|help|adjust))",
+    r"^(the\s+above\s+(?:text|content))",
+    r"^\-{3,}\s*$",  # horizontal rules often used as separators before postamble
+    r"^\*{3,}\s*$",
+]
+
+_PREAMBLE_RE = _re.compile("|".join(_PREAMBLE_PATTERNS), _re.IGNORECASE)
+_POSTAMBLE_RE = _re.compile("|".join(_POSTAMBLE_PATTERNS), _re.IGNORECASE)
+
+
+def _clean_ai_output(text: str, original_prompt: str = "") -> str:
+    """Strip preambles, postambles, and echoed prompt lines from AI output.
+
+    Args:
+        text: The raw text returned by the AI model.
+        original_prompt: The user_prompt that was sent (used to detect echoes).
+
+    Returns:
+        Cleaned text that starts and ends with actual academic content.
+    """
+    if not text or not text.strip():
+        return text
+
+    lines = text.strip().split("\n")
+    cleaned_lines = list(lines)
+
+    # --- Strip preamble lines from the top ---
+    # Remove leading blank lines and preamble lines until we hit actual content
+    while cleaned_lines:
+        stripped = cleaned_lines[0].strip()
+        if not stripped:
+            cleaned_lines.pop(0)
+            continue
+        # Check if this line matches a preamble pattern
+        if _PREAMBLE_RE.match(stripped):
+            cleaned_lines.pop(0)
+            continue
+        # Check if this line echoes part of the original prompt
+        if original_prompt and _is_prompt_echo(stripped, original_prompt):
+            cleaned_lines.pop(0)
+            continue
+        # Check if this line looks like an instruction rather than content
+        # (starts with a capital letter, contains "write" or "generate", and
+        # doesn't start with ## which would be a heading)
+        if not stripped.startswith("#") and _looks_like_instruction(stripped):
+            cleaned_lines.pop(0)
+            continue
+        break
+
+    # --- Strip postamble lines from the bottom ---
+    while cleaned_lines:
+        stripped = cleaned_lines[-1].strip()
+        if not stripped:
+            cleaned_lines.pop()
+            continue
+        if _POSTAMBLE_RE.match(stripped):
+            cleaned_lines.pop()
+            continue
+        # If the last line is a horizontal rule, remove it
+        if _re.match(r"^[\-*=_]{3,}\s*$", stripped):
+            cleaned_lines.pop()
+            continue
+        break
+
+    result = "\n".join(cleaned_lines).strip()
+    return result if result else text.strip()
+
+
+def _is_prompt_echo(line: str, prompt: str) -> bool:
+    """Check if a line echoes part of the original prompt."""
+    line_lower = line.lower().strip()
+    prompt_lower = prompt.lower()
+
+    # Check if the line contains a significant substring from the prompt
+    # (at least 15 chars to avoid false positives)
+    if len(line_lower) >= 15:
+        # Check if a chunk of the prompt appears in this line
+        for i in range(0, len(prompt_lower) - 15, 5):
+            chunk = prompt_lower[i:i + 20]
+            if chunk in line_lower:
+                return True
+
+    # Check for "Write a [section] about: [topic]" pattern
+    if _re.match(r"^write\s+(?:a|an)\s+\w+.*(?:about|on|regarding)\s*:?", line_lower):
+        return True
+
+    return False
+
+
+def _looks_like_instruction(line: str) -> bool:
+    """Check if a line looks like an instruction rather than academic content."""
+    line_lower = line.lower().strip()
+    # Lines that start with instruction-like verbs
+    instruction_starts = (
+        "write ", "generate ", "create ", "produce ", "draft ",
+        "target length", "requirements", "structure for",
+        "use the following", "write the ",
+    )
+    for start in instruction_starts:
+        if line_lower.startswith(start):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Unified Generation with Auto-Routing & Fallback
 # ---------------------------------------------------------------------------
 
@@ -572,6 +731,13 @@ async def generate_text(
                 )
 
             if text and len(text) > 10:
+                # Clean output: strip echoed prompts, preambles, postambles
+                if task_type not in ("grammar_fix", "paraphrase", "academic_enhance"):
+                    text = _clean_ai_output(text, user_prompt)
+                else:
+                    # For text-enhancement tasks, only strip preambles/postambles
+                    # (don't check for prompt echoes — the input IS the text)
+                    text = _clean_ai_output(text, "")
                 display = f"{PROVIDERS[provider]['display_name']} ({model})"
                 print(f"[AI Router] Task '{task_type}' served by {display}")
                 return text, display
@@ -693,22 +859,21 @@ async def generate_academic_text(
     structure_guide = structure_guides.get(section_type, "")
 
     user_prompt = (
-        f"Write a {section_label} about: {topic}\n\n"
-        f"Target length: approximately {max_words} words.\n\n"
+        f"SECTION TYPE: {section_label}\n"
+        f"RESEARCH TOPIC: {topic}\n"
+        f"TARGET LENGTH: approximately {max_words} words.\n\n"
         f"{structure_guide}\n"
-        f"Use the following sources and data as evidence. Only cite these sources\n"
-        f"using APA in-text format [e.g., (Author, Year)] — do NOT fabricate\n"
-        f"references:\n\n"
+        f"SOURCE MATERIAL — cite ONLY these using APA in-text format "
+        f"[e.g., (Author, Year)]. Do NOT fabricate references:\n\n"
         f"{context}\n\n"
-        f"REQUIREMENTS:\n"
-        f"- Use Markdown headings (##, ###, ####) to structure the text as\n"
-        f"  specified above.\n"
-        f"- Write in formal academic English suitable for a Q1–Q3 indexed journal.\n"
-        f"- Synthesize across sources thematically; do NOT list papers one by one.\n"
-        f"- Each paragraph: topic sentence → evidence with citations → analysis.\n"
-        f"- Ensure a clear beginning (framing), middle (analysis), and end\n"
-        f"  (synthesis/conclusion).\n\n"
-        f"Write the {section_label} now:"
+        f"FORMATTING RULES:\n"
+        f"- Markdown headings (##, ###, ####) as specified above.\n"
+        f"- Formal academic English for Q1–Q3 indexed journals.\n"
+        f"- Synthesize thematically; do NOT list papers sequentially.\n"
+        f"- Each paragraph: topic sentence, evidence with citations, analysis.\n"
+        f"- Clear beginning (framing), middle (analysis), end (synthesis).\n\n"
+        f"BEGIN OUTPUT NOW — start directly with the ## heading. "
+        f"Do NOT repeat these instructions."
     )
 
     max_tokens = min(max_words * 4, 6000)
@@ -718,4 +883,5 @@ async def generate_academic_text(
         task_type="academic_drafting",
         max_tokens=max_tokens,
         temperature=0.7,
+        timeout=90.0,
     )
