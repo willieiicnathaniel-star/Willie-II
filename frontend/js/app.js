@@ -216,6 +216,12 @@ document.querySelectorAll('.tab').forEach(tab => {
 });
 
 function switchTab(tab) {
+    // Accept either a DOM element or a string tab ID
+    if (typeof tab === 'string') {
+        const tabBtn = document.querySelector(`.tab[data-tab="${tab}"]`);
+        if (!tabBtn) return;
+        tab = tabBtn;
+    }
     // Guard admin tab: only admins may open it
     if (tab.dataset.tab === 'admin' && !(currentUser && currentUser.role === 'admin')) {
         return;
@@ -497,15 +503,19 @@ function renderQuickGenResults(data) {
 
     const fullTextToCopy = rawDraftText + citationsText + '\n\n' + data.draft.disclaimer;
 
+    // Store additional text variants for button handlers
+    window._lastQuickGenFullText = fullTextToCopy;
+    window._lastQuickGenTextWithCitations = rawDraftText + citationsText;
+
     container.innerHTML = `
         <div class="draft-toolbar">
-            <button class="btn-copy" onclick="copyGeneratedText(this, ${JSON.stringify(fullTextToCopy).replace(/'/g, "&#39;")})">
+            <button class="btn-copy" onclick="copyGeneratedText(this, window._lastQuickGenFullText)">
                 &#128203; Copy Text
             </button>
-            <button class="btn-verify" onclick="verifyAcademicFormat(${JSON.stringify(rawDraftText).replace(/'/g, "&#39;")})">
+            <button class="btn-verify" onclick="verifyAcademicFormat(window._lastQuickGenText)">
                 &#128269; Verify Academic Format
             </button>
-            <button class="btn-secondary btn-sm" onclick="downloadDraft(${JSON.stringify(rawDraftText + citationsText).replace(/'/g, "&#39;")}, '${escapeHtml(data.topic).replace(/'/g, "\\'").substring(0, 50)}')">
+            <button class="btn-secondary btn-sm" onclick="downloadDraft(window._lastQuickGenTextWithCitations, window._lastQuickGenTopic)">
                 &#128190; Download as .txt
             </button>
             <button class="btn-secondary btn-sm" onclick="exportDocument('docx', this)">
@@ -583,6 +593,17 @@ function _copyFallback(btn, text) {
         alert('Copy failed. Please select the text manually and use Ctrl+C.');
     }
     document.body.removeChild(textarea);
+}
+
+function copyArticleCitation(btn, index) {
+    const a = window._lastArticlesData && window._lastArticlesData[index];
+    if (!a) return;
+    const authors = a.authors && a.authors.length > 0
+        ? a.authors.join(', ') + (a.authors.length > 5 ? ' et al.' : '')
+        : 'Unknown';
+    const yearStr = a.year ? `(${a.year})` : '';
+    const citationText = a.title + ' | ' + authors + ' ' + yearStr + ' | ' + (a.doi || a.pdf_url || '');
+    copyGeneratedText(btn, citationText);
 }
 
 function verifyAcademicFormat(text) {
@@ -1229,15 +1250,19 @@ function renderDraftResults(data) {
 
     const fullTextToCopy = data.content + citationsText + '\n\n' + data.disclaimer;
 
+    // Store additional text variants for button handlers
+    window._lastQuickGenFullText = fullTextToCopy;
+    window._lastQuickGenTextWithCitations = data.content + citationsText;
+
     container.innerHTML = `
         <div class="draft-toolbar">
-            <button class="btn-copy" onclick="copyGeneratedText(this, ${JSON.stringify(fullTextToCopy).replace(/'/g, "&#39;")})">
+            <button class="btn-copy" onclick="copyGeneratedText(this, window._lastQuickGenFullText)">
                 &#128203; Copy Text
             </button>
-            <button class="btn-verify" onclick="verifyAcademicFormat(${JSON.stringify(data.content).replace(/'/g, "&#39;")})">
+            <button class="btn-verify" onclick="verifyAcademicFormat(window._lastQuickGenText)">
                 &#128269; Verify Academic Format
             </button>
-            <button class="btn-secondary btn-sm" onclick="downloadDraft(${JSON.stringify(data.content + citationsText).replace(/'/g, "&#39;")}, '${escapeHtml(data.topic).replace(/'/g, "\\'").substring(0, 50)}')">
+            <button class="btn-secondary btn-sm" onclick="downloadDraft(window._lastQuickGenTextWithCitations, window._lastQuickGenTopic)">
                 &#128190; Download as .txt
             </button>
             <button class="btn-secondary btn-sm" onclick="exportDocument('docx', this)">
@@ -2064,13 +2089,16 @@ function renderEnhanceResults(data, mode) {
         `;
     }
 
+    // Store for copy button handler
+    window._lastEnhancedText = enhanced;
+
     container.innerHTML = `
         <div class="enhance-result-card">
             <div class="enhance-result-header">
                 <span class="summary">${escapeHtml(data.summary || 'Enhancement complete.')}</span>
                 ${aiModelBadge(data.model_used)}
                 <div class="enhance-result-actions">
-                    <button class="btn-copy" style="background:var(--primary);color:#fff;border:1px solid var(--primary);" onclick="copyGeneratedText(this, ${JSON.stringify(enhanced).replace(/'/g, "&#39;")})">
+                    <button class="btn-copy" style="background:var(--primary);color:#fff;border:1px solid var(--primary);" onclick="copyGeneratedText(this, window._lastEnhancedText)">
                         &#128203; Copy Enhanced Text
                     </button>
                     <button class="btn-primary btn-sm" onclick="applyEnhancedToEditor()">
@@ -2246,6 +2274,9 @@ function renderHumanizeResults(data) {
     const origWords = original.split(/\s+/).filter(w => w).length;
     const newWords = humanized.split(/\s+/).filter(w => w).length;
 
+    // Store for copy button handler
+    window._lastHumanizedText = humanized;
+
     container.innerHTML = `
         <div class="humanize-result-card">
             <div class="humanize-score-banner" style="border:2px solid ${scoreColor};background:${scoreColor}11;">
@@ -2266,7 +2297,7 @@ function renderHumanizeResults(data) {
             ${comparisonHtml}
 
             <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem;">
-                <button class="btn-copy" style="background:var(--primary);color:#fff;border:1px solid var(--primary);" onclick="copyGeneratedText(this, ${JSON.stringify(humanized).replace(/'/g, "&#39;")})">
+                <button class="btn-copy" style="background:var(--primary);color:#fff;border:1px solid var(--primary);" onclick="copyGeneratedText(this, window._lastHumanizedText)">
                     &#128203; Copy Humanized Text
                 </button>
                 <button class="btn-secondary btn-sm" onclick="applyHumanizedToEditor()">
@@ -3716,6 +3747,10 @@ function renderRoadmap(data) {
             ${renderMarkdown(aiRoadmap)}
         </div>` : '';
 
+    // Store for button handlers
+    window._lastRoadmapMarkdown = fullMarkdown;
+    window._lastRoadmapTopic = data.topic;
+
     container.innerHTML = `
         <div class="roadmap-summary-bar">
             <div class="roadmap-meta">
@@ -3726,10 +3761,10 @@ function renderRoadmap(data) {
                 <span><strong>Est. Words:</strong> ${data.total_estimated_words.toLocaleString()}</span>
             </div>
             <div class="roadmap-actions">
-                <button class="btn-copy" onclick="copyGeneratedText(this, ${JSON.stringify(fullMarkdown).replace(/'/g, '&#39;')})">
+                <button class="btn-copy" onclick="copyGeneratedText(this, window._lastRoadmapMarkdown)">
                     &#128203; Copy Roadmap
                 </button>
-                <button class="btn-secondary btn-sm" onclick="downloadRoadmapMd(${JSON.stringify(fullMarkdown).replace(/'/g, '&#39;')}, ${JSON.stringify(data.topic).replace(/'/g, '&#39;')})">
+                <button class="btn-secondary btn-sm" onclick="downloadRoadmapMd(window._lastRoadmapMarkdown, window._lastRoadmapTopic)">
                     &#128190; Download .md
                 </button>
             </div>
@@ -3794,6 +3829,9 @@ document.getElementById('suggestTopicsBtn').addEventListener('click', async () =
 function renderTopics(data) {
     const container = document.getElementById('topicsResults');
 
+    // Store topics array for index-based button handlers
+    window._lastTopicsData = data.topics;
+
     const topicsHtml = data.topics.map((t, i) => `
         <div class="topic-card">
             <div class="topic-card-header">
@@ -3816,10 +3854,10 @@ function renderTopics(data) {
                     ${t.potential_journals.map(j => `<span class="journal-tag">${escapeHtml(j)}</span>`).join('')}
                 </div>
                 <div class="topic-card-actions">
-                    <button class="btn-secondary btn-sm" onclick="searchOATopics(${JSON.stringify(t.topic).replace(/'/g, '&#39;')})">
+                    <button class="btn-secondary btn-sm" onclick="searchOATopics(window._lastTopicsData[${i}].topic)">
                         &#128196; Find Open-Access Articles
                     </button>
-                    <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, ${JSON.stringify(t.topic).replace(/'/g, '&#39;')})">
+                    <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, window._lastTopicsData[${i}].topic)">
                         &#128203; Copy Topic
                     </button>
                 </div>
@@ -3918,6 +3956,9 @@ function renderOAArticles(data) {
         return map[src] || 'src-default';
     };
 
+    // Store articles array for index-based button handlers
+    window._lastArticlesData = data.articles;
+
     const articlesHtml = data.articles.map((a, i) => {
         const authors = a.authors && a.authors.length > 0
             ? a.authors.join(', ') + (a.authors.length > 5 ? ' et al.' : '')
@@ -3932,6 +3973,8 @@ function renderOAArticles(data) {
             : '';
         const srcCls = sourceClass(a.source);
         const sourceTag = a.source ? `<span class="source-tag ${srcCls}">${escapeHtml(a.source)}</span>` : '';
+        // Pre-compute citation text for the copy button
+        const citationText = a.title + ' | ' + authors + ' ' + yearStr + ' | ' + (a.doi || a.pdf_url || '');
 
         return `
             <div class="oa-article-card">
@@ -3950,7 +3993,7 @@ function renderOAArticles(data) {
                 <div class="oa-article-abstract">${abstract}</div>
                 <div class="oa-article-actions">
                     ${a.pdf_url
-                        ? `<button class="btn-primary btn-sm" onclick="downloadArticlePdf(this, ${JSON.stringify(a.pdf_url).replace(/'/g, '&#39;')})">
+                        ? `<button class="btn-primary btn-sm" onclick="downloadArticlePdf(this, window._lastArticlesData[${i}].pdf_url)">
                             &#128190; Download PDF
                            </button>`
                         : `<button class="btn-secondary btn-sm" disabled title="No direct PDF link available for this article">
@@ -3963,7 +4006,7 @@ function renderOAArticles(data) {
                            </a>`
                         : ''
                     }
-                    <button class="btn-copy btn-sm" onclick="copyGeneratedText(this, ${JSON.stringify(a.title + ' | ' + authors + ' ' + yearStr + ' | ' + (a.doi || a.pdf_url)).replace(/'/g, '&#39;')})">
+                    <button class="btn-copy btn-sm" onclick="copyArticleCitation(this, ${i})">
                         &#128203; Copy Citation
                     </button>
                 </div>
@@ -4213,3 +4256,8 @@ window.updateRoadmapFormats = updateRoadmapFormats;
 window.downloadArticlePdf = downloadArticlePdf;
 window.searchOATopics = searchOATopics;
 window.downloadRoadmapMd = downloadRoadmapMd;
+window.copyArticleCitation = copyArticleCitation;
+window.copyGeneratedText = copyGeneratedText;
+window.verifyAcademicFormat = verifyAcademicFormat;
+window.downloadDraft = downloadDraft;
+window.exportDocument = exportDocument;
