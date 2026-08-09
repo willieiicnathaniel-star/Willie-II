@@ -41,6 +41,7 @@ from .models import (
     CitationVerificationRequest,
     ConfigUpdateRequest, ContentUpdateRequest, UserRoleUpdateRequest,
     PasswordChangeRequest, AdminResetPasswordRequest, ProfileUpdateRequest,
+    AiTestRequest,
 )
 from .services import unified_search
 from .extraction import extract_from_paper, extract_batch, build_comparison_table
@@ -97,6 +98,7 @@ from .models import (
 from .ai_router import (
     generate_text, enhance_text_with_ai, generate_academic_text,
     get_available_providers, get_routing_info,
+    get_ai_status, test_provider_connection,
 )
 
 
@@ -1021,6 +1023,28 @@ async def admin_get_config(admin=Depends(require_admin)):
 async def admin_update_config(request: ConfigUpdateRequest, admin=Depends(require_admin)):
     """Update system configuration (admin only)."""
     return update_config(request.updates)
+
+
+@app.get("/api/admin/ai-config")
+async def admin_get_ai_config(admin=Depends(require_admin)):
+    """Get AI model provider status, API key configuration, and task routing (admin only).
+
+    Returns each provider's display name, available models, free/paid tier,
+    whether a key is configured, the key source (admin config vs env var),
+    and a masked preview of the key. Also returns the full task routing map.
+    """
+    return get_ai_status()
+
+
+@app.post("/api/admin/ai-config/test")
+async def admin_test_ai_provider(request: AiTestRequest, admin=Depends(require_admin)):
+    """Test an AI provider's API key by making a minimal request (admin only).
+
+    If `api_key` is provided, tests that key directly without saving it.
+    Otherwise, tests the currently configured key for the provider.
+    """
+    result = await test_provider_connection(request.provider, request.api_key)
+    return result
 
 
 @app.get("/api/admin/feature-flags")

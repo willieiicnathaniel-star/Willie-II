@@ -2688,6 +2688,7 @@ document.getElementById('refreshAdminContentBtn').addEventListener('click', load
 document.getElementById('refreshAdminStatsBtn').addEventListener('click', loadAdminStats);
 document.getElementById('refreshAdminDbSourcesBtn').addEventListener('click', loadDatabaseSources);
 document.getElementById('refreshAdminToolsBtn').addEventListener('click', loadToolIntegrations);
+document.getElementById('refreshAiConfigBtn').addEventListener('click', loadAiConfig);
 
 function requireAdmin() {
     if (!(currentUser && currentUser.role === 'admin')) {
@@ -3101,12 +3102,239 @@ async function toggleToolIntegration(toolId) {
     }
 }
 
+// ===========================================================================
+// AI Model Configuration (Admin Panel)
+// ===========================================================================
+
+const AI_PROVIDER_LABELS = {
+    gemini:    { name: 'Google Gemini',           link: 'https://aistudio.google.com/app/apikey',          tier: 'Free tier' },
+    groq:      { name: 'Groq (Llama / Mixtral)',   link: 'https://console.groq.com/keys',                   tier: 'Free tier' },
+    deepseek:  { name: 'DeepSeek',                 link: 'https://platform.deepseek.com/api_keys',          tier: 'Free tier' },
+    mistral:   { name: 'Mistral AI',               link: 'https://console.mistral.ai/api-keys/',            tier: 'Free tier' },
+    qwen:      { name: 'Qwen (Alibaba DashScope)', link: 'https://dashscope.console.aliyun.com/apiKey',     tier: 'Free tier' },
+    openai:    { name: 'OpenAI (GPT-4o)',          link: 'https://platform.openai.com/api-keys',            tier: 'Paid' },
+    anthropic: { name: 'Anthropic (Claude)',       link: 'https://console.anthropic.com/settings/keys',     tier: 'Paid' },
+};
+
+async function loadAiConfig() {
+    if (!requireAdmin()) return;
+    showStatus('aiConfigStatus', 'Loading AI model configuration...', 'loading');
+    const summaryEl = document.getElementById('aiConfigSummary');
+    const formEl = document.getElementById('aiConfigForm');
+    summaryEl.innerHTML = '';
+    formEl.innerHTML = '';
+
+    try {
+        const resp = await apiFetch('/api/admin/ai-config');
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        hideStatus('aiConfigStatus');
+
+        const providers = data.providers || {};
+        const providerEntries = Object.entries(providers);
+        const available = data.available_count || 0;
+        const total = data.total_count || providerEntries.length;
+
+        // Render summary cards
+        summaryEl.innerHTML = `
+            <div class="ai-summary-card">
+                <span class="stat-num">${available}</span>
+                <span class="stat-desc">Providers Active</span>
+            </div>
+            <div class="ai-summary-card">
+                <span class="stat-num">${total}</span>
+                <span class="stat-desc">Total Providers</span>
+            </div>
+            <div class="ai-summary-card">
+                <span class="stat-num">${available > 0 ? 'AI' : 'Template'}</span>
+                <span class="stat-desc">Active Mode</span>
+            </div>
+        `;
+
+        // Render provider cards
+        formEl.innerHTML = providerEntries.map(([pid, info]) => {
+            const label = AI_PROVIDER_LABELS[pid] || { name: pid, link: '#', tier: '' };
+            const hasKey = info.has_key;
+            const sourceLabel = info.key_source === 'admin' ? 'Admin Config'
+                              : info.key_source === 'env' ? 'Env Variable'
+                              : 'Not Set';
+            const modelsText = (info.models || []).join(', ');
+            const tierBadge = info.free_tier
+                ? '<span style="color:#38a169;font-weight:600;">Free</span>'
+                : '<span style="color:#d69e2e;font-weight:600;">Paid</span>';
+
+            return `
+                <div class="ai-provider-card ${hasKey ? 'has-key' : 'no-key'}" data-provider="${escapeHtml(pid)}">
+                    <div class="ai-provider-header">
+                        <div>
+                            <span class="ai-provider-name">${escapeHtml(label.name)}</span>
+                            <div class="ai-provider-meta">
+                                Models: ${escapeHtml(modelsText)} &middot; ${tierBadge}
+                                &middot; <a href="${escapeHtml(label.link)}" target="_blank" rel="noopener">Get API key &nearr;</a>
+                            </div>
+                        </div>
+                        <span class="ai-key-status ${hasKey ? 'configured' : 'not-configured'}">
+                            <span class="status-dot"></span>
+                            ${hasKey ? 'Configured' : 'Not configured'} (${escapeHtml(sourceLabel)})
+                        </span>
+                    </div>
+                    <div class="ai-key-input-row">
+                        <input
+                            type="password"
+                            class="ai-key-input"
+                            id="aikey_${escapeHtml(pid)}"
+                            placeholder="${hasKey ? '•••••••• (enter new key to replace)' : 'Paste your API key here...'}"
+                            data-provider="${escapeHtml(pid)}"
+                        >
+                    </div>
+                    ${hasKey && info.key_preview ? `<div class="ai-key-preview">Current: ${escapeHtml(info.key_preview)}</div>` : ''}
+                    <div class="ai-provider-actions" style="margin-top:0.6rem;">
+                        <button class="ai-btn-test" onclick="testAiProvider('${escapeHtml(pid)}')">Test Connection</button>
+                        <button class="ai-btn-clear" onclick="clearAiKey('${escapeHtml(pid)}')">Clear Key</button>
+                    </div>
+                    <div class="ai-test-result" id="aitest_${escapeHtml(pid)}"></div>
+                </div>
+            `;
+        }).join('');
+
+        // Add save button bar
+        formEl.innerHTML += `
+            <div class="ai-save-bar">
+                <button id="saveAiKeysBtn" class="btn-primary" onclick="saveAiKeys()">Save All Keys</button>
+                <span style="font-size:0.8rem;color:#718096;">Keys are stored in the platform config and override environment variables.</span>
+            </div>
+        `;
+
+        // Add routing info
+        const routing = data.task_routing || {};
+        const routingEntries = Object.entries(routing);
+        if (routingEntries.length) {
+            formEl.innerHTML += `
+                <div class="ai-routing-info">
+                    <h4>Task Routing (priority order per task)</h4>
+                    <div class="ai-routing-list">
+                        ${routingEntries.map(([task, models]) => `
+                            <div><span class="routing-task">${escapeHtml(task.replace(/_/g, ' '))}:</span> ${escapeHtml(models.join(' → '))}</div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+    } catch (err) {
+        showStatus('aiConfigStatus', `Failed to load AI config: ${err.message}`, 'error');
+    }
+}
+
+async function saveAiKeys() {
+    if (!requireAdmin()) return;
+    const inputs = document.querySelectorAll('.ai-key-input[data-provider]');
+    const updates = {};
+    let hasChanges = false;
+
+    inputs.forEach(inp => {
+        const val = inp.value.trim();
+        if (val) {
+            updates[`${inp.dataset.provider}_api_key`] = val;
+            hasChanges = true;
+        }
+    });
+
+    if (!hasChanges) {
+        showStatus('aiConfigStatus', 'No new keys entered. Enter a key in any field to save.', 'error');
+        return;
+    }
+
+    showStatus('aiConfigStatus', 'Saving AI API keys...', 'loading');
+    try {
+        const resp = await apiFetch('/api/admin/config', {
+            method: 'PUT',
+            body: JSON.stringify(updates),
+        });
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        hideStatus('aiConfigStatus');
+        showStatus('aiConfigStatus', 'AI API keys saved successfully. Provider status updated.', 'success');
+        // Clear the input fields and reload to show updated status
+        inputs.forEach(inp => { inp.value = ''; });
+        setTimeout(() => loadAiConfig(), 800);
+    } catch (err) {
+        showStatus('aiConfigStatus', `Failed to save keys: ${err.message}`, 'error');
+    }
+}
+
+async function testAiProvider(providerId) {
+    if (!requireAdmin()) return;
+    const resultEl = document.getElementById(`aitest_${providerId}`);
+    if (!resultEl) return;
+
+    // Check if there's a new key in the input field
+    const inputEl = document.getElementById(`aikey_${providerId}`);
+    const newKey = inputEl ? inputEl.value.trim() : '';
+
+    resultEl.className = 'ai-test-result show testing';
+    resultEl.textContent = 'Testing connection...';
+
+    try {
+        const resp = await apiFetch('/api/admin/ai-config/test', {
+            method: 'POST',
+            body: JSON.stringify({ provider: providerId, api_key: newKey || null }),
+        });
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        if (data.success) {
+            resultEl.className = 'ai-test-result show success';
+            resultEl.innerHTML = `&#10003; ${escapeHtml(data.message)}`;
+        } else {
+            resultEl.className = 'ai-test-result show error';
+            resultEl.innerHTML = `&#10007; ${escapeHtml(data.message)}`;
+        }
+    } catch (err) {
+        resultEl.className = 'ai-test-result show error';
+        resultEl.innerHTML = `&#10007; Error: ${escapeHtml(err.message)}`;
+    }
+}
+
+async function clearAiKey(providerId) {
+    if (!requireAdmin()) return;
+    if (!confirm(`Clear the API key for ${providerId}? This sets it to empty in the platform config. (Environment variable keys, if set, will still be used as fallback.)`)) return;
+
+    showStatus('aiConfigStatus', `Clearing key for ${providerId}...`, 'loading');
+    try {
+        const resp = await apiFetch('/api/admin/config', {
+            method: 'PUT',
+            body: JSON.stringify({ [`${providerId}_api_key`]: '' }),
+        });
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        hideStatus('aiConfigStatus');
+        showStatus('aiConfigStatus', `Key for ${providerId} cleared.`, 'success');
+        setTimeout(() => loadAiConfig(), 600);
+    } catch (err) {
+        showStatus('aiConfigStatus', `Failed: ${err.message}`, 'error');
+    }
+}
+
 // Expose admin functions for inline onclick handlers
 window.toggleUserRole = toggleUserRole;
 window.toggleUserActive = toggleUserActive;
 window.deleteUser = deleteUser;
 window.toggleDatabaseSource = toggleDatabaseSource;
 window.toggleToolIntegration = toggleToolIntegration;
+window.testAiProvider = testAiProvider;
+window.clearAiKey = clearAiKey;
+window.saveAiKeys = saveAiKeys;
 
 
 // ===========================================================================

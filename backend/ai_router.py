@@ -215,7 +215,23 @@ SYSTEM_PROMPTS = {
 # ---------------------------------------------------------------------------
 
 def _get_api_key(provider: str) -> Optional[str]:
-    """Get the API key for a provider from environment variables."""
+    """Get the API key for a provider.
+
+    Checks the admin-configured SystemConfig first (set via the Admin Panel),
+    then falls back to environment variables.
+    """
+    # 1. Check admin config (overrides env vars when set)
+    try:
+        from .admin import get_config
+        config = get_config()
+        config_key = f"{provider}_api_key"
+        val = config.get(config_key, "")
+        if val and val.strip():
+            return val.strip()
+    except Exception:
+        pass
+
+    # 2. Fall back to environment variables
     env_key = PROVIDERS[provider]["env_key"]
     return os.environ.get(env_key, "").strip() or None
 
@@ -248,6 +264,128 @@ def get_routing_info() -> dict:
         },
         "task_routing": TASK_ROUTING,
     }
+
+
+def _key_source(provider: str) -> str:
+    """Return 'admin' if key comes from admin config, 'env' if from env var, else 'none'."""
+    try:
+        from .admin import get_config
+        config = get_config()
+        val = config.get(f"{provider}_api_key", "")
+        if val and val.strip():
+            return "admin"
+    except Exception:
+        pass
+    env_key = PROVIDERS[provider]["env_key"]
+    if os.environ.get(env_key, "").strip():
+        return "env"
+    return "none"
+
+
+def _mask_key(key: Optional[str]) -> str:
+    """Mask an API key, showing only the first 4 and last 4 characters."""
+    if not key:
+        return ""
+    if len(key) <= 12:
+        return "*" * len(key)
+    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+
+def get_ai_status() -> dict:
+    """Return detailed AI provider status for the Admin Panel.
+
+    For each provider, reports whether a key is configured, where it comes from
+    (admin config vs env var), and a masked preview of the key.
+    """
+    providers = {}
+    for pid, info in PROVIDERS.items():
+        key = _get_api_key(pid)
+        providers[pid] = {
+            "display_name": info["display_name"],
+            "models": info["models"],
+            "free_tier": info["free_tier"],
+            "api_style": info["api_style"],
+            "env_key": info["env_key"],
+            "has_key": bool(key),
+            "key_source": _key_source(pid),
+            "key_preview": _mask_key(key),
+        }
+    return {
+        "providers": providers,
+        "task_routing": {
+            task: [f"{p}/{m}" for p, m in models]
+            for task, models in TASK_ROUTING.items()
+        },
+        "available_count": sum(1 for pid in PROVIDERS if _get_api_key(pid)),
+        "total_count": len(PROVIDERS),
+    }
+
+
+async def test_provider_connection(provider: str, api_key: str = None) -> dict:
+    """Test a provider's API key by making a minimal request.
+
+    Args:
+        provider: Provider ID (e.g. 'gemini', 'groq')
+        api_key: If provided, test this key; otherwise test the currently configured key.
+
+    Returns:
+        dict with 'success' (bool), 'message' (str), 'model' (str)
+    """
+    if provider not in PROVIDERS:
+        return {"success": False, "message": f"Unknown provider: {provider}"}
+
+    info = PROVIDERS[provider]
+    key = api_key or _get_api_key(provider)
+    if not key:
+        return {"success": False, "message": "No API key configured for this provider."}
+
+    model = info["models"][0]
+    style = info["api_style"]
+    base_url = info["base_url"]
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if style == "gemini":
+                url = f"{base_url}/models/{model}:generateContent?key={key}"
+                body = {
+                    "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+                    "generationConfig": {"maxOutputTokens": 5},
+                }
+                resp = await client.post(url, json=body)
+            elif style == "anthropic":
+                headers = {
+                    "x-api-key": key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
+                body = {
+                    "model": model, "max_tokens": 5,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                }
+                resp = await client.post(f"{base_url}/messages", json=body, headers=headers)
+            else:
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                }
+                body = {
+                    "model": model, "max_tokens": 5,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                }
+                resp = await client.post(f"{base_url}/chat/completions", json=body, headers=headers)
+
+        if resp.status_code == 200:
+            return {"success": True, "message": f"Connection successful via {model}.", "model": model}
+        elif resp.status_code == 401 or resp.status_code == 403:
+            return {"success": False, "message": f"Authentication failed (HTTP {resp.status_code}). Check your API key.", "model": model}
+        elif resp.status_code == 429:
+            return {"success": True, "message": f"Key is valid (rate-limited on test call). Model: {model}.", "model": model}
+        else:
+            return {"success": False, "message": f"HTTP {resp.status_code}: {resp.text[:200]}", "model": model}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Request timed out. The provider may be slow or unreachable.", "model": model}
+    except Exception as e:
+        return {"success": False, "message": f"Error: {str(e)[:200]}", "model": model}
 
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,15 @@ class SystemConfig:
     openalex_email: str = "research@theeye.local"
     crossref_email: str = "research@theeye.local"
 
+    # AI Model API keys (admin-configurable; overrides env vars when set)
+    gemini_api_key: str = ""
+    groq_api_key: str = ""
+    deepseek_api_key: str = ""
+    mistral_api_key: str = ""
+    dashscope_api_key: str = ""
+    openai_api_key: str = ""
+    anthropic_api_key: str = ""
+
     # Search defaults
     default_max_results: int = 25
     default_quartiles: list = field(default_factory=lambda: ["Q1", "Q2", "Q3"])

@@ -319,6 +319,11 @@ class ProfileUpdateRequest(BaseModel):
     research_field: str = None
 
 
+class AiTestRequest(BaseModel):
+    provider: str = Field(..., description="Provider ID: gemini, groq, deepseek, mistral, qwen, openai, anthropic")
+    api_key: str = Field(default=None, description="Optional API key to test (uses configured key if omitted)")
+
+
 # ---------------------------------------------------------------------------
 # Document Drafting & Roadmap Engine
 # ---------------------------------------------------------------------------

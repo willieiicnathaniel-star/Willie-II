@@ -2826,3 +2826,243 @@ code {
     margin-right: 0.5rem;
     flex-shrink: 0;
 }
+
+/* ---------------------------------------------------------------- */
+/* AI Model Configuration (Admin Panel)                             */
+/* ---------------------------------------------------------------- */
+
+.ai-config-banner {
+    margin-bottom: 1rem;
+    background: #f0f7ff;
+    border-left: 4px solid #4299e1;
+}
+
+.ai-config-summary {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.ai-summary-card {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    text-align: center;
+    min-width: 140px;
+}
+
+.ai-summary-card .stat-num {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #2b6cb0;
+    display: block;
+    line-height: 1.2;
+}
+
+.ai-summary-card .stat-desc {
+    font-size: 0.8rem;
+    color: #718096;
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.ai-provider-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ai-provider-card.has-key {
+    border-left: 4px solid #48bb78;
+}
+
+.ai-provider-card.no-key {
+    border-left: 4px solid #cbd5e0;
+}
+
+.ai-provider-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.ai-provider-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1a202c;
+}
+
+.ai-provider-meta {
+    font-size: 0.78rem;
+    color: #718096;
+    margin-top: 0.15rem;
+}
+
+.ai-key-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+}
+
+.ai-key-status.configured {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.ai-key-status.not-configured {
+    background: #edf2f7;
+    color: #718096;
+}
+
+.ai-key-status .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.ai-key-status.configured .status-dot { background: #48bb78; }
+.ai-key-status.not-configured .status-dot { background: #cbd5e0; }
+
+.ai-key-input-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ai-key-input {
+    flex: 1;
+    min-width: 200px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+    transition: border-color 0.2s;
+}
+
+.ai-key-input:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.15);
+}
+
+.ai-key-preview {
+    font-size: 0.78rem;
+    color: #a0aec0;
+    font-family: 'Courier New', monospace;
+    margin-top: 0.35rem;
+}
+
+.ai-provider-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ai-btn-test,
+.ai-btn-clear {
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    transition: all 0.2s;
+}
+
+.ai-btn-test {
+    background: #ebf8ff;
+    border-color: #90cdf4;
+    color: #2c5282;
+}
+
+.ai-btn-test:hover {
+    background: #bee3f8;
+}
+
+.ai-btn-clear {
+    background: #fff5f5;
+    border-color: #fed7d7;
+    color: #c53030;
+}
+
+.ai-btn-clear:hover {
+    background: #fed7d7;
+}
+
+.ai-test-result {
+    margin-top: 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    display: none;
+}
+
+.ai-test-result.show { display: block; }
+
+.ai-test-result.success {
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    color: #22543d;
+}
+
+.ai-test-result.error {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+    color: #c53030;
+}
+
+.ai-test-result.testing {
+    background: #ebf8ff;
+    border: 1px solid #90cdf4;
+    color: #2c5282;
+}
+
+.ai-routing-info {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.ai-routing-info h4 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 0.5rem;
+}
+
+.ai-routing-list {
+    font-size: 0.8rem;
+    color: #4a5568;
+    line-height: 1.6;
+}
+
+.ai-routing-list .routing-task {
+    font-weight: 600;
+    color: #2b6cb0;
+}
+
+.ai-save-bar {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
