@@ -159,11 +159,34 @@ TASK_ROUTING = {
 
 SYSTEM_PROMPTS = {
     "academic_drafting": (
-        "You are an expert academic writer. Generate a well-structured, scholarly "
-        "text based on the user's request. Use formal academic English, include "
-        "in-text citations in APA format where appropriate, and organize content "
-        "with clear headings. Do NOT fabricate sources — only cite the sources "
-        "provided in the context. Return the text in Markdown format."
+        "You are an expert academic writer producing publication-quality text "
+        "suitable for Q1–Q3 indexed journals. Follow these rules strictly:\n\n"
+        "1. STRUCTURE: Use Markdown headings to organize content hierarchically:\n"
+        "   - ## for the main section title (e.g., ## Literature Review: [Topic])\n"
+        "   - ### for thematic sub-sections (e.g., ### Institutional Quality and Growth)\n"
+        "   - #### for further sub-divisions within a theme when warranted\n"
+        "2. ACADEMIC TONE: Write in formal, objective, scholarly English. Use "
+        "third-person perspective, precise terminology, and hedged claims "
+        "(e.g., 'the evidence suggests,' 'these findings indicate'). Avoid "
+        "colloquialisms, contractions, and first-person pronouns unless "
+        "conventionally appropriate.\n"
+        "3. SYNTHESIS: Do not merely summarize sources sequentially. Group "
+        "findings thematically, compare and contrast methodologies, evaluate "
+        "convergences and divergences, and synthesize across studies.\n"
+        "4. CITATIONS: Use APA in-text citation format [e.g., (Author, Year)] "
+        "and only cite the sources provided in the context. NEVER fabricate "
+        "references. Number citations sequentially as they appear.\n"
+        "5. PARAGRAPH STRUCTURE: Each paragraph should begin with a clear topic "
+        "sentence, followed by evidence and analysis, and end with a transition "
+        "or concluding observation. Aim for 4–8 sentences per paragraph.\n"
+        "6. COMPLETENESS: Ensure the text has a clear introduction framing the "
+        "section, well-developed body paragraphs, and a concluding synthesis "
+        "or summary paragraph that ties findings together and identifies gaps.\n"
+        "7. JOURNAL STANDARD: The writing must meet the rigor expected in "
+        "Q1–Q3 indexed journals: precise operational definitions, attention "
+        "to methodological quality, awareness of limitations, and engagement "
+        "with theoretical frameworks.\n"
+        "Return the text in Markdown format with proper heading hierarchy."
     ),
     "topic_suggestion": (
         "You are a research advisor helping a scholar identify novel research "
@@ -606,15 +629,89 @@ async def generate_academic_text(
         (generated_text, model_display_name) on success
         (None, None) if all models fail
     """
+    # Section-specific structural guidance
+    structure_guides = {
+        "literature_review": (
+            "STRUCTURE for Literature Review:\n"
+            "- Begin with ## Literature Review: {topic}\n"
+            "- Write a framing introduction paragraph (no sub-heading) that scope\n"
+            "  the review, states the number of sources, and outlines the thematic\n"
+            "  organization.\n"
+            "- Create ### sub-headings for each thematic cluster (e.g., ### Institutional\n"
+            "  Quality and Governance, ### Economic Growth Determinants). Group 2–4\n"
+            "  papers per theme. Under each sub-heading, write 2–3 paragraphs that\n"
+            "  synthesize findings, compare methodologies, and evaluate convergence.\n"
+            "- Use #### sub-sub-headings only if a theme has enough papers to warrant\n"
+            "  further division.\n"
+            "- End with ### Synthesis and Research Gaps — summarise overarching\n"
+            "  patterns, note contradictions, identify methodological gaps, and\n"
+            "  propose directions for future research.\n"
+        ),
+        "introduction": (
+            "STRUCTURE for Introduction:\n"
+            "- Begin with ## Introduction\n"
+            "- Paragraph 1: Broad context and significance of the topic.\n"
+            "- Paragraph 2: Narrow to the specific research problem and gap.\n"
+            "- Use ### sub-headings if the introduction covers multiple dimensions\n"
+            "  (e.g., ### Background, ### Research Gap, ### Objectives).\n"
+            "- Paragraph 3: State the research question(s) or objectives clearly.\n"
+            "- Paragraph 4: Briefly preview the structure of the paper.\n"
+        ),
+        "abstract": (
+            "STRUCTURE for Abstract (150–250 words, single paragraph unless\n"
+            "the target journal requires structured abstracts):\n"
+            "- Begin with ## Abstract\n"
+            "- Write ONE dense paragraph covering: (1) purpose/objective, (2) data\n"
+            "  and methodology, (3) key findings, (4) implications/contribution.\n"
+            "- Do NOT use sub-headings for an unstructured abstract.\n"
+            "- If the journal requires a structured abstract, use ### sub-headings:\n"
+            "  ### Purpose, ### Methodology, ### Findings, ### Implications.\n"
+        ),
+        "conclusion": (
+            "STRUCTURE for Conclusion:\n"
+            "- Begin with ## Conclusion\n"
+            "- Paragraph 1: Restate the research problem and summarise key findings.\n"
+            "- Use ### sub-headings if covering multiple themes (e.g., ### Summary\n"
+            "  of Findings, ### Policy Implications, ### Limitations, ### Future\n"
+            "  Research).\n"
+            "- Paragraph 2+: Discuss implications, acknowledge limitations, and\n"
+            "  propose avenues for future research.\n"
+            "- Final paragraph: Closing statement on the contribution and broader\n"
+            "  significance.\n"
+        ),
+        "summary": (
+            "STRUCTURE for Summary:\n"
+            "- Begin with ## Summary\n"
+            "- Write 2–3 paragraphs that distil the main arguments and findings.\n"
+            "- Use ### sub-headings if the summary spans multiple themes.\n"
+            "- End with a concluding paragraph that highlights the take-away\n"
+            "  message.\n"
+        ),
+    }
+
+    section_label = section_type.replace("_", " ")
+    structure_guide = structure_guides.get(section_type, "")
+
     user_prompt = (
-        f"Write a {section_type.replace('_', ' ')} about: {topic}\n\n"
+        f"Write a {section_label} about: {topic}\n\n"
         f"Target length: approximately {max_words} words.\n\n"
-        f"Use the following sources and data as evidence. Only cite these sources:\n\n"
+        f"{structure_guide}\n"
+        f"Use the following sources and data as evidence. Only cite these sources\n"
+        f"using APA in-text format [e.g., (Author, Year)] — do NOT fabricate\n"
+        f"references:\n\n"
         f"{context}\n\n"
-        f"Write the {section_type.replace('_', ' ')} now:"
+        f"REQUIREMENTS:\n"
+        f"- Use Markdown headings (##, ###, ####) to structure the text as\n"
+        f"  specified above.\n"
+        f"- Write in formal academic English suitable for a Q1–Q3 indexed journal.\n"
+        f"- Synthesize across sources thematically; do NOT list papers one by one.\n"
+        f"- Each paragraph: topic sentence → evidence with citations → analysis.\n"
+        f"- Ensure a clear beginning (framing), middle (analysis), and end\n"
+        f"  (synthesis/conclusion).\n\n"
+        f"Write the {section_label} now:"
     )
 
-    max_tokens = min(max_words * 3, 4000)
+    max_tokens = min(max_words * 4, 6000)
 
     return await generate_text(
         user_prompt=user_prompt,

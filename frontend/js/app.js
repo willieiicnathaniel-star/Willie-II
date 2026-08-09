@@ -413,13 +413,8 @@ function renderQuickGenResults(data) {
     window._lastQuickGenWordCount = data.draft.word_count || 0;
     window._lastQuickGenTotalSources = data.total_sources || 0;
 
-    // Draft output
-    let htmlContent = escapeHtml(data.draft.content)
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>');
-    htmlContent = `<p>${htmlContent}</p>`;
+    // Draft output — use full Markdown renderer for proper heading hierarchy
+    let htmlContent = renderMarkdown(data.draft.content);
 
     // Citations
     const citationsHtml = data.draft.citations.length > 0 ? `
@@ -1198,13 +1193,17 @@ async function generateDraftSection() {
 function renderDraftResults(data) {
     const container = document.getElementById('draftResults');
 
-    let htmlContent = escapeHtml(data.content)
-        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-        .replace(/\n\n/g, '</p><p>')
-        .replace(/\n/g, '<br>');
+    // Use full Markdown renderer for proper heading hierarchy
+    let htmlContent = renderMarkdown(data.content);
 
-    htmlContent = `<p>${htmlContent}</p>`;
+    // Store for export functionality
+    window._lastQuickGenText = data.content;
+    window._lastQuickGenCitations = data.citations || [];
+    window._lastQuickGenDisclaimer = data.disclaimer || '';
+    window._lastQuickGenSectionType = data.section_type || '';
+    window._lastQuickGenTopic = data.topic || '';
+    window._lastQuickGenWordCount = data.word_count || 0;
+    window._lastQuickGenTotalSources = data.citations ? data.citations.length : 0;
 
     const citationsHtml = data.citations.length > 0 ? `
         <div class="citation-list">
@@ -1240,6 +1239,18 @@ function renderDraftResults(data) {
             </button>
             <button class="btn-secondary btn-sm" onclick="downloadDraft(${JSON.stringify(data.content + citationsText).replace(/'/g, "&#39;")}, '${escapeHtml(data.topic).replace(/'/g, "\\'").substring(0, 50)}')">
                 &#128190; Download as .txt
+            </button>
+            <button class="btn-secondary btn-sm" onclick="exportDocument('docx', this)">
+                &#128196; Word
+            </button>
+            <button class="btn-secondary btn-sm" onclick="exportDocument('pdf', this)">
+                &#128196; PDF
+            </button>
+            <button class="btn-secondary btn-sm" onclick="exportDocument('html', this)">
+                &#128196; HTML
+            </button>
+            <button class="btn-secondary btn-sm" onclick="exportDocument('md', this)">
+                &#128196; Markdown
             </button>
         </div>
         <div class="draft-output">

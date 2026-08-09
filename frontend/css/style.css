@@ -395,14 +395,103 @@ body {
     font-size: 0.95rem;
 }
 
-.draft-output h2, .draft-output h3 {
+/* Academic heading hierarchy within draft output */
+.draft-output h1,
+.draft-output h2,
+.draft-output h3,
+.draft-output h4,
+.draft-output h5,
+.draft-output h6 {
     font-family: 'Inter', sans-serif;
     color: var(--primary);
-    margin-top: 1rem;
+    line-height: 1.3;
+}
+
+.draft-output h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 2px solid var(--border);
+}
+
+.draft-output h2 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.draft-output h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-top: 1.25rem;
     margin-bottom: 0.5rem;
 }
 
-.draft-output h2:first-child { margin-top: 0; }
+.draft-output h4 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.4rem;
+    color: var(--text);
+}
+
+.draft-output h5,
+.draft-output h6 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 0.75rem;
+    margin-bottom: 0.3rem;
+    color: var(--text);
+}
+
+.draft-output h1:first-child,
+.draft-output h2:first-child,
+.draft-output h3:first-child { margin-top: 0; }
+
+.draft-output p {
+    margin: 0.75rem 0;
+}
+
+.draft-output ul,
+.draft-output ol {
+    margin: 0.75rem 0;
+    padding-left: 1.75rem;
+}
+
+.draft-output li {
+    margin-bottom: 0.4rem;
+}
+
+.draft-output blockquote {
+    border-left: 3px solid var(--accent);
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: var(--text-light);
+    font-style: italic;
+}
+
+.draft-output strong { font-weight: 600; }
+
+/* Override .ai-markdown defaults when inside .draft-output */
+.draft-output .ai-markdown {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+}
+
+.draft-output .ai-markdown h1,
+.draft-output .ai-markdown h2,
+.draft-output .ai-markdown h3,
+.draft-output .ai-markdown h4,
+.draft-output .ai-markdown h5,
+.draft-output .ai-markdown h6 {
+    color: var(--primary);
+}
 
 .draft-disclaimer {
     background: #fffaf0;
@@ -959,26 +1048,11 @@ body {
 }
 
 .draft-output {
-    padding: 1.5rem;
-    background: var(--surface);
     border: 1px solid var(--border);
     border-top: 1px solid var(--border);
     border-radius: 0 0 var(--radius) var(--radius);
-    line-height: 1.8;
-    font-size: 0.92rem;
-    color: var(--text);
-    white-space: pre-wrap;
     word-wrap: break-word;
-}
-
-.draft-output h1,
-.draft-output h2,
-.draft-output h3 {
-    margin: 0.5rem 0;
-}
-
-.draft-output p {
-    margin: 0.5rem 0;
+    overflow-wrap: break-word;
 }
 
 /* ---- Academic Format Verification Panel ---- */

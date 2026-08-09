@@ -547,6 +547,7 @@ def _generate_abstract(topic: str, papers: list[Paper],
         f"the analysis reveals significant relationships relevant to {topic.lower()}."
 
     abstract = (
+        f"## Abstract\n\n"
         f"This study examines {topic.lower()}, drawing on evidence from "
         f"{len(papers)} peer-reviewed studies. Employing {method_str.lower()} with "
         f"{sample_str}, we investigate the key determinants and outcomes associated with "
