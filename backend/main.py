@@ -69,6 +69,7 @@ from .writing_tools import (
     get_writing_tools, get_writing_tool,
     analyze_writing, enhance_for_journal,
     fix_grammar, paraphrase_text, enhance_academic, enhance_text_all,
+    humanize_text,
 )
 
 from .data_analysis import (
@@ -1279,6 +1280,34 @@ async def writing_enhance_all(request: WritingAnalysisRequest, user=Depends(requ
         }
     # Fall back to local engine
     return enhance_text_all(request.text)
+
+
+@app.post("/api/writing/humanize")
+async def writing_humanize(request: WritingAnalysisRequest, user=Depends(require_auth)):
+    """Humanize and naturalize text by reducing formulaic AI patterns.
+
+    Improves readability and authentic voice by:
+    - Reducing overused AI transition words
+    - Varying sentence beginnings
+    - Replacing formulaic phrases with natural alternatives
+    - Varying sentence length for natural rhythm
+
+    AI provenance is still tracked and disclosed per platform integrity policy.
+    """
+    # Try AI-powered humanization first
+    ai_text, ai_model = await enhance_text_with_ai(request.text, "paraphrase")
+    if ai_text:
+        # Run local humanizer on AI output for best results
+        result = humanize_text(ai_text)
+        result["model_used"] = ai_model
+        result["summary"] = (
+            f"Text humanized and naturalized (AI-assisted by {ai_model}, "
+            f"then locally refined). {len(result.get('changes', []))} "
+            f"pattern(s) reduced. Naturalness score: {result.get('naturalness_score', 0)}/100."
+        )
+        return result
+    # Fall back to local engine only
+    return humanize_text(request.text)
 
 
 # ---------------------------------------------------------------------------

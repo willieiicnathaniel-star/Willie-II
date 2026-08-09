@@ -2090,6 +2090,207 @@ function applyEnhancedToEditor() {
     }
 }
 
+// ---- Humanize & Naturalize ----
+
+let _lastHumanizedText = '';
+
+document.getElementById('humanizeBtn').addEventListener('click', humanizeText);
+document.getElementById('humanizeClearBtn').addEventListener('click', () => {
+    document.getElementById('humanizeTextInput').value = '';
+    document.getElementById('humanizeResults').innerHTML = '';
+    hideStatus('humanizeStatus');
+    document.getElementById('humanizeTextInput').focus();
+});
+document.getElementById('humanizeCopyBtn').addEventListener('click', () => {
+    if (_lastHumanizedText) {
+        navigator.clipboard.writeText(_lastHumanizedText).then(() => {
+            showStatus('humanizeStatus', 'Humanized text copied to clipboard!', 'success');
+            setTimeout(() => hideStatus('humanizeStatus'), 3000);
+        }).catch(() => {
+            showStatus('humanizeStatus', 'Copy failed. Please select and copy manually.', 'error');
+            setTimeout(() => hideStatus('humanizeStatus'), 3000);
+        });
+    } else {
+        showStatus('humanizeStatus', 'No humanized text to copy. Run the tool first.', 'error');
+        setTimeout(() => hideStatus('humanizeStatus'), 3000);
+    }
+});
+
+async function humanizeText() {
+    const text = document.getElementById('humanizeTextInput').value.trim();
+    if (!text) {
+        showStatus('humanizeStatus', 'Please paste some text first.', 'error');
+        setTimeout(() => hideStatus('humanizeStatus'), 3000);
+        return;
+    }
+
+    const btn = document.getElementById('humanizeBtn');
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Humanizing...';
+
+    showStatus('humanizeStatus', 'Analyzing and naturalizing text...', 'loading');
+    document.getElementById('humanizeResults').innerHTML = '';
+
+    try {
+        const resp = await apiFetch('/api/writing/humanize', {
+            method: 'POST',
+            body: JSON.stringify({ text }),
+        });
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            throw new Error(errData.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        hideStatus('humanizeStatus');
+        showStatus('humanizeStatus', data.summary || 'Humanization complete.', 'success');
+        setTimeout(() => hideStatus('humanizeStatus'), 6000);
+
+        _lastHumanizedText = data.humanized || text;
+        renderHumanizeResults(data);
+    } catch (err) {
+        showStatus('humanizeStatus', `Humanization failed: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
+
+function renderHumanizeResults(data) {
+    const container = document.getElementById('humanizeResults');
+    const humanized = data.humanized || '';
+    const original = data.original || '';
+    const changes = data.changes || [];
+    const patterns = data.patterns_detected || [];
+    const score = data.naturalness_score || 0;
+
+    // Score color
+    let scoreColor = '#e53e3e';
+    let scoreLabel = 'Needs Work';
+    if (score >= 75) { scoreColor = '#38a169'; scoreLabel = 'Natural'; }
+    else if (score >= 50) { scoreColor = '#319795'; scoreLabel = 'Moderate'; }
+    else if (score >= 30) { scoreColor = '#dd6b20'; scoreLabel = 'AI Patterns Detected'; }
+
+    // Patterns detected tags
+    let patternsHtml = '';
+    if (patterns.length > 0) {
+        patternsHtml = `
+            <div style="margin-bottom:1rem;">
+                <h4 style="font-size:0.85rem;color:#718096;margin-bottom:0.5rem;">AI Patterns Detected (${patterns.length})</h4>
+                <div class="humanize-patterns-list">
+                    ${patterns.map(p => `<span class="humanize-pattern-tag">&#9888; ${escapeHtml(p)}</span>`).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Changes list
+    let changesHtml = '';
+    if (changes.length > 0) {
+        changesHtml = `
+            <div style="margin-bottom:1rem;">
+                <h4 style="font-size:0.85rem;color:#718096;margin-bottom:0.5rem;">Improvements Made (${changes.length})</h4>
+                <ul class="humanize-changes-list">
+                    ${changes.map(c => {
+                        const typeLabel = c.type ? c.type.replace(/_/g, ' ') : 'change';
+                        const origText = c.original ? escapeHtml(String(c.original).substring(0, 80)) : '';
+                        const fixedText = c.fixed ? escapeHtml(String(c.fixed).substring(0, 80)) : '';
+                        return `
+                            <li class="humanize-change-item">
+                                <span class="humanize-change-type">${escapeHtml(typeLabel)}</span>
+                                <span class="humanize-change-detail">
+                                    ${origText ? `<span class="original">${origText}</span>` : ''}
+                                    ${fixedText ? ` &rarr; <span class="fixed">${fixedText}</span>` : ''}
+                                </span>
+                            </li>
+                        `;
+                    }).join('')}
+                </ul>
+            </div>
+        `;
+    } else {
+        changesHtml = `
+            <div style="margin-bottom:1rem;">
+                <p style="color:var(--success);font-weight:600;">&#9989; Your text already reads naturally. No significant AI patterns detected.</p>
+            </div>
+        `;
+    }
+
+    // Before/After comparison
+    const comparisonHtml = `
+        <div class="humanize-comparison">
+            <div class="humanize-comparison-col before">
+                <h4>Before</h4>
+                <div class="humanize-comparison-text">${escapeHtml(original)}</div>
+            </div>
+            <div class="humanize-comparison-col after">
+                <h4>After</h4>
+                <div class="humanize-comparison-text">${escapeHtml(humanized)}</div>
+            </div>
+        </div>
+    `;
+
+    // Word counts
+    const origWords = original.split(/\s+/).filter(w => w).length;
+    const newWords = humanized.split(/\s+/).filter(w => w).length;
+
+    container.innerHTML = `
+        <div class="humanize-result-card">
+            <div class="humanize-score-banner" style="border:2px solid ${scoreColor};background:${scoreColor}11;">
+                <div>
+                    <div class="humanize-score-number" style="color:${scoreColor};">${score}</div>
+                    <div class="humanize-score-label">Naturalness Score / 100 &mdash; ${scoreLabel}</div>
+                </div>
+                <div style="text-align:right;">
+                    ${aiModelBadge(data.model_used)}
+                    <div style="font-size:0.8rem;color:#718096;margin-top:0.3rem;">
+                        ${origWords} &rarr; ${newWords} words
+                    </div>
+                </div>
+            </div>
+
+            ${patternsHtml}
+            ${changesHtml}
+            ${comparisonHtml}
+
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem;">
+                <button class="btn-copy" style="background:var(--primary);color:#fff;border:1px solid var(--primary);" onclick="copyGeneratedText(this, ${JSON.stringify(humanized).replace(/'/g, "&#39;")})">
+                    &#128203; Copy Humanized Text
+                </button>
+                <button class="btn-secondary btn-sm" onclick="applyHumanizedToEditor()">
+                    &#10003; Apply to Editor
+                </button>
+                <button class="btn-secondary btn-sm" onclick="sendHumanizedToAnalysis()">
+                    &#128270; Send to Writing Analysis
+                </button>
+            </div>
+        </div>
+    `;
+
+    setTimeout(() => {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+}
+
+function applyHumanizedToEditor() {
+    if (_lastHumanizedText) {
+        document.getElementById('humanizeTextInput').value = _lastHumanizedText;
+        showStatus('humanizeStatus', 'Humanized text applied to editor. You can run the tool again or copy the text.', 'success');
+        setTimeout(() => hideStatus('humanizeStatus'), 4000);
+        document.getElementById('humanizeTextInput').focus();
+    }
+}
+
+function sendHumanizedToAnalysis() {
+    if (_lastHumanizedText) {
+        document.getElementById('writingTextInput').value = _lastHumanizedText;
+        showStatus('humanizeStatus', 'Text sent to Writing Analysis. Scroll up to run analysis.', 'success');
+        setTimeout(() => hideStatus('humanizeStatus'), 4000);
+        document.getElementById('writingTextInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+}
+
 async function loadWritingTools() {
     try {
         const resp = await apiFetch('/api/writing/tools');

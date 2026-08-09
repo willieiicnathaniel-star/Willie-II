@@ -800,6 +800,35 @@
 
             <div id="writingAnalysisResults" class="results-container"></div>
             <div id="journalReadinessResults" class="results-container"></div>
+
+            <!-- ============ HUMANIZE & NATURALIZE SECTION ============ -->
+            <div class="section-divider"><span>Humanize &amp; Naturalize</span></div>
+
+            <div class="humanize-panel">
+                <div class="panel-header">
+                    <h3>&#127919; Humanize &amp; Naturalize Text</h3>
+                    <p>Reduce formulaic AI patterns and make your text read more naturally. This tool varies sentence structure, reduces overused transitions, replaces clich&eacute;d phrases, and improves prose rhythm &mdash; all while preserving your meaning and citations.</p>
+                </div>
+
+                <div class="humanize-info-banner">
+                    <strong>&#8505; How it works:</strong>
+                    <span>This tool detects and reduces common AI writing patterns: repetitive transitions (Furthermore, Moreover, Additionally), formulaic phrases ("plays a crucial role," "shed light on"), uniform sentence beginnings, and overly long sentences. The result is text that reads with more natural variety and authentic voice. <strong>AI provenance is still tracked</strong> per platform integrity policy.</span>
+                </div>
+
+                <div class="humanize-textarea-wrap">
+                    <textarea id="humanizeTextInput" class="enhance-textarea" rows="10"
+                        placeholder="Paste your text here to humanize and naturalize it..."></textarea>
+                </div>
+
+                <div class="humanize-actions">
+                    <button id="humanizeBtn" class="btn-primary btn-humanize">&#127919; Humanize Text</button>
+                    <button id="humanizeCopyBtn" class="btn-copy" style="background:var(--surface);color:var(--text);border:1px solid var(--border);">&#128203; Copy Result</button>
+                    <button id="humanizeClearBtn" class="btn-secondary btn-sm">&#10006; Clear</button>
+                </div>
+            </div>
+
+            <div id="humanizeStatus" class="status-message" style="display:none;"></div>
+            <div id="humanizeResults" class="results-container"></div>
         </section>
 
         <!-- ===================== REFERENCES TAB ===================== -->

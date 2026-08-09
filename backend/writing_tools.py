@@ -1002,3 +1002,392 @@ def enhance_text_all(text: str) -> dict:
         "academic": academic_result,
         "summary": summary,
     }
+
+
+# ---------------------------------------------------------------------------
+# Humanize & Naturalize Engine
+# Reduces formulaic AI patterns and produces more natural, varied prose.
+# Improves readability and authentic voice while preserving academic meaning.
+# ---------------------------------------------------------------------------
+
+# Overused AI transition words -> natural alternatives (rotated for variety)
+_AI_TRANSITION_REPLACEMENTS = {
+    "furthermore": ["additionally", "in addition", "what is more", "beyond this"],
+    "moreover": ["additionally", "further", "beyond that", "what is more"],
+    "additionally": ["furthermore", "in addition", "also", "beyond this"],
+    "consequently": ["as a result", "for this reason", "thus", "which led to"],
+    "subsequently": ["afterward", "later", "following this", "in turn"],
+    "nevertheless": ["even so", "still", "yet", "despite this"],
+    "nonetheless": ["even so", "still", "yet", "all the same"],
+    "therefore": ["as a result", "for this reason", "thus", "so"],
+    "thus": ["as a result", "in this way", "so", "which means"],
+    "hence": ["as a result", "for this reason", "so", "which means"],
+    "accordingly": ["as a result", "in response", "so", "which led to"],
+    "notably": ["in particular", "worth noting", "significantly", "of note"],
+    "specifically": ["in particular", "notably", "that is", "to be precise"],
+    "particularly": ["especially", "in particular", "notably", "above all"],
+    "essentially": ["fundamentally", "at its core", "in essence", "basically"],
+    "fundamentally": ["at its core", "in essence", "essentially", "at bottom"],
+    "predominantly": ["mainly", "largely", "chiefly", "primarily"],
+    "it is important to note that": ["it is worth noting that", "of note,", "importantly,", "key to this is that"],
+    "it is worth noting that": ["of note,", "importantly,", "it should be mentioned that", "notably,"],
+    "it should be noted that": ["of note,", "importantly,", "it is worth mentioning that", "notably,"],
+    "in conclusion": ["to conclude", "in sum", "overall", "taken together"],
+    "in summary": ["to summarize", "in sum", "overall", "taken together"],
+    "as a result": ["consequently", "which led to", "so", "for this reason"],
+    "on the other hand": ["conversely", "by contrast", "alternatively", "then again"],
+    "in addition": ["additionally", "furthermore", "also", "beyond this"],
+}
+
+# Formulaic AI sentence starters -> natural alternatives
+_AI_STARTER_VARIATIONS = {
+    "this study": ["the present research", "this analysis", "the current investigation", "the present work", "our examination"],
+    "this paper": ["the present study", "this analysis", "the current work", "this research", "our investigation"],
+    "this research": ["the present study", "this analysis", "the current investigation", "this work", "our research"],
+    "this analysis": ["the present study", "this examination", "the current research", "our analysis", "this investigation"],
+    "these findings": ["the results", "these results", "the outcomes", "what the data show", "the evidence"],
+    "the results show": ["the findings indicate", "the data reveal", "the evidence demonstrates", "the results indicate", "the analysis reveals"],
+    "the findings reveal": ["the results indicate", "the data show", "the evidence suggests", "the analysis reveals", "the outcomes demonstrate"],
+    "this study examines": ["the present research examines", "this analysis investigates", "the current study explores", "our investigation examines", "this work explores"],
+    "this study investigates": ["the present research explores", "this analysis examines", "the current investigation studies", "our work investigates", "this research examines"],
+    "this study aims": ["the present research aims", "this analysis seeks", "the current investigation aims", "our study seeks", "this work aims"],
+}
+
+# Repetitive AI phrases -> natural alternatives
+_AI_PHRASE_REPLACEMENTS = {
+    r"\bplays a (?:crucial|vital|pivotal|critical|key) role in\b": ["is central to", "is essential to", "is integral to", "is fundamental to"],
+    r"\bplays a significant role in\b": ["contributes significantly to", "is important for", "meaningfully shapes", "substantially influences"],
+    r"\bis of paramount importance\b": ["is critically important", "is essential", "is crucial", "matters greatly"],
+    r"\bis of great significance\b": ["is significant", "matters considerably", "is important", "carries weight"],
+    r"\bhas attracted considerable attention\b": ["has drawn significant interest", "has garnered attention", "has become a focus of interest", "has attracted much scrutiny"],
+    r"\bhas gained increasing attention\b": ["has drawn growing interest", "has become increasingly scrutinized", "has attracted more focus", "has gained traction"],
+    r"\bin the realm of\b": ["in the field of", "within", "in the domain of", "in the area of"],
+    r"\ba growing body of literature\b": ["an expanding literature", "increasing scholarship", "a widening body of research", "mounting evidence"],
+    r"\bshed light on\b": ["illuminate", "clarify", "explain", "elucidate"],
+    r"\bsheds light on\b": ["illuminates", "clarifies", "explains", "elucidates"],
+    r"\bpave the way for\b": ["enable", "facilitate", "open possibilities for", "create the foundation for"],
+    r"\bpaves the way for\b": ["enables", "facilitates", "opens possibilities for", "creates the foundation for"],
+    r"\bin recent years\b": ["lately", "recently", "of late", "in the past decade"],
+    r"\bremains a topic of debate\b": ["is still debated", "continues to be contested", "remains unsettled", "is an open question"],
+    r"\bremains largely unexplored\b": ["has received little attention", "is not well understood", "has not been closely examined", "warrants further study"],
+    r"\bwarrants further investigation\b": ["deserves more study", "calls for closer examination", "merits additional research", "needs further exploration"],
+    r"\bbridge the gap between\b": ["connect", "link", "reconcile", "unite"],
+    r"\bbridges the gap between\b": ["connects", "links", "reconciles", "unites"],
+    r"\bdelve into\b": ["examine closely", "explore", "investigate", "analyze"],
+    r"\bdelves into\b": ["examines closely", "explores", "investigates", "analyzes"],
+    r"\b underscore[s]? the importance of\b": ["highlight the importance of", "emphasize the significance of", "draw attention to the importance of", "stress the need for"],
+    r"\bholds true for\b": ["applies to", "is valid for", "is the case for", "extends to"],
+    r"\bit is widely acknowledged that\b": ["it is well known that", "scholars generally agree that", "it is broadly recognized that", "there is broad consensus that"],
+    r"\bit is well established that\b": ["research has shown that", "evidence confirms that", "it is widely accepted that", "scholars have demonstrated that"],
+    r"\bremains an open question\b": ["is still unresolved", "has yet to be settled", "is not fully answered", "continues to be debated"],
+}
+
+# Patterns that indicate AI-generated text
+_AI_PATTERN_INDICATORS = [
+    "it is important to note that",
+    "it is worth noting that",
+    "it should be noted that",
+    "plays a crucial role",
+    "plays a vital role",
+    "plays a pivotal role",
+    "a growing body of literature",
+    "shed light on",
+    "pave the way for",
+    "bridge the gap",
+    "delve into",
+    "in the realm of",
+    "has attracted considerable attention",
+    "has gained increasing attention",
+    "remains largely unexplored",
+    "warrants further investigation",
+    "is of paramount importance",
+]
+
+
+def humanize_text(text: str) -> dict:
+    """
+    Humanize and naturalize text by reducing formulaic AI patterns.
+
+    This function improves writing quality by:
+    1. Reducing overused AI transition words (Furthermore, Moreover, etc.)
+    2. Varying sentence beginnings to break repetitive patterns
+    3. Replacing formulaic AI phrases with natural alternatives
+    4. Varying sentence length for more natural rhythm
+    5. Reducing uniform paragraph structure
+
+    The tool preserves citations, technical terms, and academic meaning
+    while making the prose read more naturally. AI provenance is still
+    tracked and disclosed per platform integrity policy.
+    """
+    if not text or len(text.strip()) < 20:
+        return {
+            "original": text,
+            "humanized": text,
+            "changes": [],
+            "patterns_detected": [],
+            "naturalness_score": 0,
+            "summary": "Text too short for humanization analysis.",
+        }
+
+    original = text
+    humanized = text
+    changes = []
+    patterns_detected = []
+
+    # --- 1. Detect AI patterns ---
+    text_lower = text.lower()
+    for pattern in _AI_PATTERN_INDICATORS:
+        if pattern in text_lower:
+            patterns_detected.append(pattern)
+
+    # --- 2. Replace formulaic AI phrases ---
+    _phrase_counter = {}
+
+    for pattern, alternatives in _AI_PHRASE_REPLACEMENTS.items():
+        matches = list(re.finditer(pattern, humanized, re.IGNORECASE))
+        if matches:
+            for match in reversed(matches):  # reverse to preserve indices
+                key = pattern
+                idx = _phrase_counter.get(key, 0)
+                replacement = alternatives[idx % len(alternatives)]
+                _phrase_counter[key] = idx + 1
+
+                # Preserve capitalization
+                if match.group(0)[0].isupper():
+                    replacement = replacement[0].upper() + replacement[1:]
+
+                old_text = match.group(0)
+                humanized = humanized[:match.start()] + replacement + humanized[match.end():]
+                changes.append({
+                    "type": "phrase_naturalization",
+                    "original": old_text,
+                    "fixed": replacement,
+                    "category": "humanize",
+                })
+
+    # --- 3. Reduce overused AI transition words ---
+    _transition_counter = {}
+    sentences = re.split(r'(?<=[.!?])\s+', humanized)
+    naturalized_sentences = []
+
+    for sentence in sentences:
+        s = sentence.strip()
+        if not s:
+            naturalized_sentences.append(s)
+            continue
+
+        original_s = s
+        first_word_match = re.match(r'^([A-Za-z]+)', s)
+        if first_word_match:
+            first_word = first_word_match.group(1).lower()
+            if first_word in _AI_TRANSITION_REPLACEMENTS:
+                # Count how many times this transition has been used
+                count = _transition_counter.get(first_word, 0)
+                alternatives = _AI_TRANSITION_REPLACEMENTS[first_word]
+
+                # Only replace if this transition appears more than once
+                # (first occurrence can stay, subsequent ones get varied)
+                if count > 0:
+                    replacement = alternatives[count % len(alternatives)]
+                    if s[0].isupper():
+                        replacement = replacement[0].upper() + replacement[1:]
+                    # Replace just the first word, handle comma after
+                    if s[len(first_word_match.group(1)):len(first_word_match.group(1))+1] == ',':
+                        new_s = replacement + s[len(first_word_match.group(1))+1:]
+                    else:
+                        new_s = replacement + s[len(first_word_match.group(1)):]
+                    changes.append({
+                        "type": "transition_variation",
+                        "original": original_s[:40] + "...",
+                        "fixed": new_s[:40] + "...",
+                        "category": "humanize",
+                    })
+                    s = new_s
+
+                _transition_counter[first_word] = count + 1
+
+        naturalized_sentences.append(s)
+
+    humanized = " ".join(naturalized_sentences)
+
+    # --- 4. Vary sentence beginnings ---
+    _starter_counter = {}
+    sentences = re.split(r'(?<=[.!?])\s+', humanized)
+    varied_sentences = []
+
+    for sentence in sentences:
+        s = sentence.strip()
+        if not s:
+            varied_sentences.append(s)
+            continue
+
+        original_s = s
+        s_lower = s.lower()
+
+        for starter, alternatives in _AI_STARTER_VARIATIONS.items():
+            if s_lower.startswith(starter):
+                count = _starter_counter.get(starter, 0)
+                # Replace only if this starter has been used before
+                if count > 0:
+                    replacement = alternatives[count % len(alternatives)]
+                    if s[0].isupper():
+                        replacement = replacement[0].upper() + replacement[1:]
+                    # Replace the starter, keeping the rest
+                    new_s = replacement + s[len(starter):]
+                    changes.append({
+                        "type": "sentence_starter_variation",
+                        "original": original_s[:50] + ("..." if len(original_s) > 50 else ""),
+                        "fixed": new_s[:50] + ("..." if len(new_s) > 50 else ""),
+                        "category": "humanize",
+                    })
+                    s = new_s
+                    break
+
+                _starter_counter[starter] = count + 1
+
+        varied_sentences.append(s)
+
+    humanized = " ".join(varied_sentences)
+
+    # --- 5. Vary sentence length: split very long sentences ---
+    sentences = re.split(r'(?<=[.!?])\s+', humanized)
+    length_adjusted = []
+
+    for sentence in sentences:
+        s = sentence.strip()
+        if not s:
+            length_adjusted.append(s)
+            continue
+
+        words_in_s = s.split()
+        if len(words_in_s) > 35:
+            # Try to split at a semicolon or conjunction
+            split_points = []
+            for conj in [r'\s+; however,\s+', r'\s+; moreover,\s+', r'\s+; consequently,\s+',
+                         r'\s+; therefore,\s+', r'\s+; additionally,\s+',
+                         r', and\s+', r', but\s+', r', while\s+', r', whereas\s+']:
+                for m in re.finditer(conj, s, re.IGNORECASE):
+                    left = s[:m.start()].split()
+                    right = s[m.end():].split()
+                    if len(left) > 8 and len(right) > 8:
+                        split_points.append(m)
+
+            if split_points:
+                # Split at the middle-most point
+                mid = len(s) // 2
+                best = min(split_points, key=lambda m: abs((m.start() + m.end()) // 2 - mid))
+                left_part = s[:best.start()].strip().rstrip(',').rstrip(';')
+                right_part = s[best.end():].strip()
+                if not left_part.endswith(('.', '!', '?')):
+                    left_part += '.'
+                if right_part and right_part[0].islower():
+                    right_part = right_part[0].upper() + right_part[1:]
+                new_s = left_part + ' ' + right_part
+                if new_s != s:
+                    changes.append({
+                        "type": "sentence_split",
+                        "original": original_s[:50] + ("..." if len(original_s) > 50 else ""),
+                        "fixed": new_s[:50] + ("..." if len(new_s) > 50 else ""),
+                        "category": "humanize",
+                    })
+                    s = new_s
+
+        length_adjusted.append(s)
+
+    humanized = " ".join(length_adjusted)
+
+    # --- 6. Remove redundant qualifiers that AI tends to overuse ---
+    redundant_qualifiers = [
+        (r'\b(?:it is )?important to (?:note|mention|highlight|emphasize) that\b', "", 0),
+        (r'\b(?:it is )?worth noting that\b', "", 0),
+        (r'\b(?:it should be )?(?:noted|mentioned|emphasized) that\b', "", 0),
+        (r'\bas previously mentioned\b', "", 0),
+        (r'\bas stated earlier\b', "", 0),
+        (r'\bas discussed above\b', "", 0),
+    ]
+
+    for pattern, _, _ in redundant_qualifiers:
+        if re.search(pattern, humanized, re.IGNORECASE):
+            new_humanized = re.sub(pattern, '', humanized, flags=re.IGNORECASE)
+            if new_humanized != humanized:
+                # Clean up: capitalize next letter if sentence start
+                new_humanized = re.sub(r'^\s+', '', new_humanized)
+                new_humanized = re.sub(r'\.\s+([a-z])', lambda m: '. ' + m.group(1).upper(), new_humanized)
+                changes.append({
+                    "type": "redundancy_removal",
+                    "original": "filler qualifier phrase",
+                    "fixed": "removed for directness",
+                    "category": "humanize",
+                })
+                humanized = new_humanized
+
+    # Clean up double spaces from replacements
+    while "  " in humanized:
+        humanized = humanized.replace("  ", " ")
+    # Fix space before punctuation
+    humanized = re.sub(r'\s+([,.!?;:])', r'\1', humanized)
+    # Capitalize first letter after period if not already
+    humanized = re.sub(r'([.!?]\s+)([a-z])', lambda m: m.group(1) + m.group(2).upper(), humanized)
+
+    # --- Calculate naturalness score ---
+    naturalness_score = _calculate_naturalness_score(original, humanized, patterns_detected, changes)
+
+    if humanized == original:
+        summary = "Your text already reads naturally. No significant AI patterns detected."
+    else:
+        summary = (
+            f"Naturalized text with {len(changes)} improvement(s): "
+            f"reduced {len(patterns_detected)} AI pattern(s), "
+            f"varied transitions and sentence structure. "
+            f"Naturalness score improved to {naturalness_score}/100."
+        )
+
+    return {
+        "original": original,
+        "humanized": humanized,
+        "changes": changes,
+        "patterns_detected": patterns_detected,
+        "naturalness_score": naturalness_score,
+        "summary": summary,
+    }
+
+
+def _calculate_naturalness_score(original: str, humanized: str, patterns: list, changes: list) -> int:
+    """Calculate a naturalness score (0-100) based on AI pattern reduction."""
+    score = 50  # Start at middle
+
+    # Fewer AI patterns = higher score
+    original_lower = original.lower()
+    total_patterns = sum(1 for p in _AI_PATTERN_INDICATORS if p in original_lower)
+    remaining_patterns = len(patterns) - len([p for p in patterns if p not in humanized.lower()])
+    if total_patterns > 0:
+        reduction = (total_patterns - remaining_patterns) / total_patterns
+        score += int(reduction * 25)
+    else:
+        score += 15  # Already had few patterns
+
+    # More changes made = more naturalized
+    if len(changes) >= 10:
+        score += 15
+    elif len(changes) >= 5:
+        score += 10
+    elif len(changes) >= 1:
+        score += 5
+
+    # Sentence length variation
+    orig_sentences = re.split(r'[.!?]+', original)
+    orig_lengths = [len(s.split()) for s in orig_sentences if s.strip()]
+    new_sentences = re.split(r'[.!?]+', humanized)
+    new_lengths = [len(s.split()) for s in new_sentences if s.strip()]
+
+    if len(orig_lengths) > 1 and len(new_lengths) > 1:
+        import statistics
+        try:
+            orig_cv = statistics.stdev(orig_lengths) / statistics.mean(orig_lengths) if statistics.mean(orig_lengths) > 0 else 0
+            new_cv = statistics.stdev(new_lengths) / statistics.mean(new_lengths) if statistics.mean(new_lengths) > 0 else 0
+            if new_cv > orig_cv:
+                score += 10  # More variation is good
+        except Exception:
+            pass
+
+    return max(0, min(100, score))

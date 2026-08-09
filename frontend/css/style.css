@@ -1200,6 +1200,196 @@ body {
     padding: 0.5rem 1.2rem !important;
 }
 
+/* ================================================================ */
+/* HUMANIZE & NATURALIZE SECTION                                    */
+/* ================================================================ */
+
+.humanize-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.humanize-info-banner {
+    background: rgba(49, 151, 149, 0.08);
+    border-left: 4px solid var(--teal, #319795);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #4a5568;
+}
+
+.humanize-info-banner strong {
+    color: var(--teal, #319795);
+}
+
+.humanize-textarea-wrap {
+    margin-bottom: 0.75rem;
+}
+
+.humanize-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.btn-humanize {
+    font-size: 0.9rem !important;
+    padding: 0.5rem 1.2rem !important;
+}
+
+/* Humanize results display */
+.humanize-result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.humanize-score-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.humanize-score-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.humanize-score-label {
+    font-size: 0.85rem;
+    color: #718096;
+    margin-top: 0.25rem;
+}
+
+.humanize-patterns-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.humanize-pattern-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: rgba(237, 137, 54, 0.1);
+    color: #c05621;
+    border: 1px solid rgba(237, 137, 54, 0.3);
+    border-radius: 12px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.humanize-changes-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0;
+}
+
+.humanize-change-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-size: 0.85rem;
+}
+
+.humanize-change-type {
+    display: inline-block;
+    min-width: 140px;
+    font-weight: 600;
+    color: var(--teal, #319795);
+    font-size: 0.78rem;
+}
+
+.humanize-change-detail {
+    color: #4a5568;
+    flex: 1;
+}
+
+.humanize-change-detail .original {
+    text-decoration: line-through;
+    color: #e53e3e;
+}
+
+.humanize-change-detail .fixed {
+    color: #38a169;
+    font-weight: 500;
+}
+
+.humanize-text-output {
+    background: #f7fafc;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.humanize-comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+    .humanize-comparison {
+        grid-template-columns: 1fr;
+    }
+}
+
+.humanize-comparison-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+}
+
+.humanize-comparison-col h4 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+    color: #718096;
+}
+
+.humanize-comparison-col.before h4 {
+    color: #e53e3e;
+}
+
+.humanize-comparison-col.after h4 {
+    color: #38a169;
+}
+
+.humanize-comparison-text {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
 /* Enhancement results display */
 .enhance-result-card {
     background: var(--surface);
