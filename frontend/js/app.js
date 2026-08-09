@@ -3457,17 +3457,56 @@ async function downloadArticlePdf(btn, url) {
     const originalHtml = btn ? btn.innerHTML : '';
     const originalDisabled = btn ? btn.disabled : false;
 
+    // ---- Quick check: does the URL look like a direct PDF? ----
+    // If not, skip the backend attempt (which would waste 15-20 seconds failing)
+    // and open directly in the user's browser instead.
+    const urlPath = url.toLowerCase().split('?')[0].split('#')[0];
+    const looksLikePdf = urlPath.endsWith('.pdf')
+        || urlPath.includes('/pdf/')
+        || urlPath.endsWith('/pdf')
+        || urlPath.includes('/download/')
+        || urlPath.includes('/fulltext/')
+        || urlPath.includes('/ftpdf/');
+
+    // Known landing-page patterns that are NOT direct PDFs
+    const isLandingPage = urlPath.includes('doi.org/')
+        || urlPath.includes('/science/article')
+        || urlPath.includes('/article/')
+        || urlPath.includes('/abs/')
+        || urlPath.includes('/abstract')
+        || urlPath.includes('/landingpage');
+
+    if (!looksLikePdf || isLandingPage) {
+        // ---- Not a direct PDF link — open in browser right away ----
+        showOaToast('This article does not have a direct PDF link. Opening the source page in a new tab — you can download the PDF from there.', 'info');
+        window.open(url, '_blank', 'noopener,noreferrer');
+        if (btn) {
+            btn.innerHTML = '&#128279; Opened';
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.disabled = originalDisabled;
+            }, 2500);
+        }
+        return;
+    }
+
     // ---- Show loading state on button ----
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> Downloading...';
     }
 
+    // ---- Strategy: Try backend download first (15s timeout), then auto-fallback to browser ----
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
         const resp = await apiFetch('/api/drafting/download-pdf', {
             method: 'POST',
             body: JSON.stringify({ url }),
+            signal: controller.signal,
         });
+        clearTimeout(timeoutId);
 
         if (!resp.ok) {
             const err = await resp.json().catch(() => ({}));
@@ -3477,14 +3516,12 @@ async function downloadArticlePdf(btn, url) {
         // ---- Verify the blob is actually a PDF ----
         const blob = await resp.blob();
 
-        // Check blob type / size — an HTML error page masquerading as a response
         if (blob.size < 1000) {
-            throw new Error('The downloaded file is too small to be a valid PDF. The source may require direct browser access.');
+            throw new Error('File too small to be a valid PDF.');
         }
 
-        // If the blob type is HTML, the backend likely couldn't get the real PDF
         if (blob.type && blob.type.includes('text/html')) {
-            throw new Error('The source returned an HTML page instead of a PDF. Please try opening it directly in your browser.');
+            throw new Error('Source returned HTML instead of PDF.');
         }
 
         // ---- Trigger the download ----
@@ -3492,7 +3529,6 @@ async function downloadArticlePdf(btn, url) {
         const a = document.createElement('a');
         a.href = downloadUrl;
 
-        // Extract filename from Content-Disposition header
         const cd = resp.headers.get('Content-Disposition') || '';
         const match = cd.match(/filename\*?=["']?(?:UTF-8'')?([^"';\s]+)/i);
         a.download = match ? decodeURIComponent(match[1]) : 'THEeye_article.pdf';
@@ -3513,24 +3549,44 @@ async function downloadArticlePdf(btn, url) {
         }
 
     } catch (err) {
-        console.error('[downloadArticlePdf] Error:', err);
+        clearTimeout(timeoutId);
+        console.error('[downloadArticlePdf] Backend download failed:', err);
 
-        // ---- Restore button ----
+        // ---- AUTOMATIC FALLBACK: Open the PDF URL directly in the browser ----
+        // The user's browser has a residential IP, cookies, and JS — it can access
+        // PDFs that the cloud server cannot.
+        showOaToast('Opening PDF in a new tab... If it doesn\'t load, use "Open in Browser" or try again.', 'info');
+
+        try {
+            // Try to open the PDF directly in a new tab
+            const newTab = window.open(url, '_blank');
+
+            // If popup was blocked, try creating a link and clicking it
+            if (!newTab || newTab.closed || typeof newTab.closed === 'undefined') {
+                const fallbackLink = document.createElement('a');
+                fallbackLink.href = url;
+                fallbackLink.target = '_blank';
+                fallbackLink.rel = 'noopener noreferrer';
+                document.body.appendChild(fallbackLink);
+                fallbackLink.click();
+                document.body.removeChild(fallbackLink);
+            }
+        } catch (openErr) {
+            console.error('[downloadArticlePdf] Failed to open URL:', openErr);
+        }
+
+        // ---- Restore button with a "Retry" option ----
         if (btn) {
-            btn.innerHTML = '&#9888; Download Failed';
+            btn.innerHTML = '&#128279; Open PDF';
+            btn.disabled = false;
+            btn.onclick = () => window.open(url, '_blank');
             setTimeout(() => {
                 btn.innerHTML = originalHtml;
                 btn.disabled = originalDisabled;
-            }, 3000);
+                // Restore original onclick after 10 seconds
+                setTimeout(() => { btn.onclick = null; }, 100);
+            }, 10000);
         }
-
-        // ---- Show user-friendly error with fallback option ----
-        const errorMsg = err.message || 'Unknown error occurred.';
-        showOaToast(
-            `PDF download failed: ${errorMsg} You can try opening the article directly in your browser.`,
-            'error',
-            () => window.open(url, '_blank')
-        );
     }
 }
 

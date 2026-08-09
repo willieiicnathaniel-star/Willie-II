@@ -717,10 +717,15 @@ async def _search_openalex_oa(query, max_results, client):
                     pdf_url = loc_pdf
                     break
 
-        if not pdf_url:
-            continue
+        # Validate that pdf_url is actually a PDF link (not a landing page)
+        if pdf_url and not _is_likely_pdf_url(pdf_url):
+            pdf_url = None
 
-        landing_url = best_oa.get("landing_page_url") or pdf_url
+        landing_url = best_oa.get("landing_page_url") or ""
+
+        # Skip only if we have neither a PDF nor a landing page
+        if not pdf_url and not landing_url:
+            continue
 
         authors = []
         for auth in work.get("authorships", [])[:5]:
@@ -737,8 +742,8 @@ async def _search_openalex_oa(query, max_results, client):
             "abstract": _reconstruct_abstract(work.get("abstract_inverted_index")),
             "cited_by_count": work.get("cited_by_count", 0),
             "is_open_access": True,
-            "pdf_url": pdf_url,
-            "oa_url": landing_url,
+            "pdf_url": pdf_url or "",
+            "oa_url": landing_url or pdf_url or "",
             "source": "OpenAlex",
             "openalex_id": work.get("id", ""),
             "license": best_oa.get("license", ""),
@@ -839,15 +844,15 @@ async def _search_core_oa(query, max_results, client):
         if isinstance(source_url, list) and source_url and not pdf_url:
             pdf_url = source_url[0]
 
-        # If no direct PDF, use the landing page URL
+        # Landing page URL (for "Open in Browser" — NOT a direct PDF)
         landing_url = item.get("url") or ""
 
         if not pdf_url and not landing_url:
             continue
 
-        # If pdf_url is not a real PDF link but landing_url exists, use landing_url
-        if not pdf_url and landing_url:
-            pdf_url = landing_url
+        # Only keep pdf_url if it looks like an actual PDF link
+        if pdf_url and not _is_likely_pdf_url(pdf_url):
+            pdf_url = ""
 
         authors_raw = item.get("authors", [])
         authors = []
@@ -917,8 +922,9 @@ async def _search_doaj_oa(query, max_results, client):
         if not pdf_url and not landing_url:
             continue
 
-        if not pdf_url:
-            pdf_url = landing_url
+        # Only keep pdf_url if it looks like an actual PDF link
+        if pdf_url and not _is_likely_pdf_url(pdf_url):
+            pdf_url = ""
 
         authors = []
         for a in bibjson.get("author", [])[:5]:
@@ -1274,15 +1280,21 @@ async def download_pdf(url: str) -> tuple:
       - If an HTML page is returned, attempts to extract the real PDF link
       - Retries with SSL verification disabled as a fallback
     """
+    # Parse the URL to get the origin for the Referer header
+    parsed = urlparse(url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
     browser_headers = {
         "User-Agent": BROWSER_UA,
         "Accept": "application/pdf,*/*",
         "Accept-Language": "en-US,en;q=0.9",
+        "Referer": origin,
+        "Origin": origin,
     }
 
     # ---- Attempt 1: Normal download with browser headers ----
     try:
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True, headers=browser_headers) as client:
+        async with httpx.AsyncClient(timeout=25.0, follow_redirects=True, headers=browser_headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             content = resp.content
@@ -1300,7 +1312,6 @@ async def download_pdf(url: str) -> tuple:
                 pdf_url = _extract_pdf_link_from_html(content.decode("utf-8", errors="ignore"), url)
                 if pdf_url and pdf_url != url:
                     print(f"[download_pdf] Extracted PDF URL from HTML: {pdf_url}")
-                    # Recurse with the extracted URL
                     return await download_pdf(pdf_url)
 
             # Not a PDF and no link found — raise an informative error
@@ -1309,17 +1320,18 @@ async def download_pdf(url: str) -> tuple:
                 f"{len(content)} bytes). The article may require direct browser access."
             )
 
-    except httpx.HTTPStatusError:
-        raise
+    except httpx.HTTPStatusError as e:
+        # Don't retry on 4xx/5xx — SSL fallback won't help
+        raise ValueError(f"HTTP {e.response.status_code} from source. The host may block server-side downloads.")
     except httpx.ConnectError as e:
         print(f"[download_pdf] Connection error: {e}. Retrying with SSL verification disabled.")
     except httpx.HTTPError as e:
         if "ssl" not in str(e).lower() and "certificate" not in str(e).lower():
-            raise
+            raise ValueError(f"Connection error: {str(e)[:200]}")
         print(f"[download_pdf] SSL error: {e}. Retrying with SSL verification disabled.")
 
     # ---- Attempt 2: Retry with SSL verification disabled ----
-    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True, headers=browser_headers, verify=False) as client:
+    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True, headers=browser_headers, verify=False) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         content = resp.content
@@ -1341,6 +1353,45 @@ async def download_pdf(url: str) -> tuple:
             f"The URL did not return a PDF (got {content_type or 'unknown type'}, "
             f"{len(content)} bytes). The article may require direct browser access."
         )
+
+
+def _is_likely_pdf_url(url: str) -> bool:
+    """Heuristic check: does this URL point to a direct PDF file vs. an HTML landing page?
+
+    Academic hosts return landing pages (HTML) that describe the article but are
+    not downloadable PDFs.  We want to avoid presenting those as 'Download PDF'
+    buttons, because the backend will fetch HTML and the user gets confused.
+    """
+    if not url or not isinstance(url, str):
+        return False
+    url_lower = url.lower().split("?")[0].split("#")[0]
+
+    # ---- Definitely a PDF ----
+    if url_lower.endswith(".pdf"):
+        return True
+    if "/pdf/" in url_lower or url_lower.endswith("/pdf"):
+        return True
+    if "/download/" in url_lower:
+        return True  # CORE pattern: core.ac.uk/download/12345
+    if "/fulltext/" in url_lower:
+        return True
+    if "/ftpdf/" in url_lower or "/direct/" in url_lower:
+        return True
+
+    # ---- Definitely NOT a PDF (known landing-page patterns) ----
+    if "doi.org/" in url_lower:
+        return False  # DOI resolver → always a landing page
+    if "/science/article" in url_lower:
+        return False  # ScienceDirect / Elsevier landing page
+    if "/article/" in url_lower:
+        return False  # Springer, Frontiers, etc. landing pages
+    if "/abs/" in url_lower or "/abstract" in url_lower:
+        return False  # arXiv abstract, PubMed abstract
+    if "/landingpage" in url_lower or "/landing_page" in url_lower:
+        return False
+
+    # ---- Uncertain: allow it — download_pdf() will verify the actual content ----
+    return True
 
 
 def _extract_filename(resp, url: str) -> str:
