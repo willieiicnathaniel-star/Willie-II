@@ -780,7 +780,7 @@ function renderVerifyResults(data) {
     const container = document.getElementById('verifyResults');
     if (!container) return;
 
-    // Safety guards: ensure all expected properties exist
+    // --- Safety guards: extract all data with defaults ---
     const wordCount = data.word_count || 0;
     const sentenceCount = data.sentence_count || 0;
     const avgSentLen = data.avg_sentence_length || 'N/A';
@@ -793,13 +793,52 @@ function renderVerifyResults(data) {
     const academicRatio = data.academic_ratio != null ? data.academic_ratio + '%' : 'N/A';
     const toneAssessment = data.tone_assessment || 'N/A';
     const transitionCount = data.transition_count || 0;
-    const overallScore = data.overall_score != null ? data.overall_score : 'N/A';
+    const overallScore = data.overall_score != null ? data.overall_score : 0;
     const suggestions = data.suggestions || [];
 
+    // New analysis data with safety guards
+    const structure = data.structure || {};
+    const argument = data.argument || {};
+    const standards = data.academic_standards || {};
+
+    const structScore = structure.structure_score != null ? structure.structure_score : 0;
+    const argScore = argument.argument_score != null ? argument.argument_score : 0;
+    const toneScore = standards.formal_tone_score != null ? standards.formal_tone_score : 0;
+
+    const headings = structure.headings || [];
+    const hierarchyIssues = structure.hierarchy_issues || [];
+    const sectionsFound = structure.sections_found || [];
+    const sectionsMissing = structure.sections_missing || [];
+    const numberingFormat = structure.numbering_format || 'none';
+
+    const hasThesis = argument.has_thesis_statement || false;
+    const thesisIndicators = argument.thesis_indicators || [];
+    const counterargCount = argument.counterargument_count || 0;
+    const counterargMarkers = argument.counterargument_markers || [];
+    const evidenceCount = argument.evidence_count || 0;
+    const citationCount = argument.citation_count || 0;
+    const citationFormat = argument.citation_format || 'none';
+    const evidencePhrases = argument.evidence_phrases || [];
+    const criticalCount = argument.critical_analysis_count || 0;
+    const criticalMarkers = argument.critical_markers || [];
+    const perspectiveBalance = argument.perspective_balance || 'unknown';
+    const argumentDepth = argument.argument_depth || 'unknown';
+
+    const contractionCount = standards.contraction_count || 0;
+    const contractionsFound = standards.contractions_found || [];
+    const informalCount = standards.informal_word_count || 0;
+    const informalWords = standards.informal_words || [];
+    const hedgingCount = standards.hedging_count || 0;
+    const hedgingWords = standards.hedging_words || [];
+    const firstPersonCount = standards.first_person_count || 0;
+
+    // --- Score banner ---
     const scoreColor = overallScore >= 80 ? 'var(--success)' : overallScore >= 60 ? 'var(--warning)' : 'var(--danger)';
     const scoreLabel = overallScore >= 80 ? 'Excellent academic format' : overallScore >= 60 ? 'Good, with room for improvement' : 'Needs significant revision';
 
-    // Build checklist items
+    const subScoreColor = (s) => s >= 80 ? 'var(--success)' : s >= 60 ? 'var(--warning)' : 'var(--danger)';
+
+    // --- Build expanded checklist ---
     const checklist = [];
     checklist.push({
         label: 'Academic Tone',
@@ -831,6 +870,52 @@ function renderVerifyResults(data) {
         status: data.academic_ratio >= 3 ? 'pass' : (data.academic_ratio >= 1 ? 'warn' : 'fail'),
         detail: `${academicRatio} academic ratio`,
     });
+    // New checklist items
+    checklist.push({
+        label: 'Heading Structure',
+        status: headings.length > 0 && hierarchyIssues.length === 0 ? 'pass' : (headings.length > 0 ? 'warn' : 'fail'),
+        detail: headings.length > 0 ? `${headings.length} headings, ${hierarchyIssues.length} issue(s)` : 'No headings detected',
+    });
+    checklist.push({
+        label: 'Academic Sections',
+        status: sectionsFound.length >= 4 ? 'pass' : (sectionsFound.length >= 2 ? 'warn' : 'fail'),
+        detail: `${sectionsFound.length} found, ${sectionsMissing.length} missing`,
+    });
+    checklist.push({
+        label: 'Numbering Format',
+        status: numberingFormat === 'decimal' ? 'pass' : (numberingFormat === 'simple' ? 'warn' : 'fail'),
+        detail: numberingFormat === 'none' ? 'No numbering detected' : `${numberingFormat} numbering`,
+    });
+    checklist.push({
+        label: 'Thesis Statement',
+        status: hasThesis ? 'pass' : 'fail',
+        detail: hasThesis ? `Found (${thesisIndicators.length} indicator(s))` : 'Not detected',
+    });
+    checklist.push({
+        label: 'Counterarguments',
+        status: counterargCount >= 3 ? 'pass' : (counterargCount >= 1 ? 'warn' : 'fail'),
+        detail: `${counterargCount} counterargument marker(s)`,
+    });
+    checklist.push({
+        label: 'Evidence & Citations',
+        status: citationCount >= 3 ? 'pass' : (evidenceCount >= 1 ? 'warn' : 'fail'),
+        detail: `${citationCount} citation(s), ${evidenceCount} evidence phrase(s)`,
+    });
+    checklist.push({
+        label: 'Critical Analysis',
+        status: criticalCount >= 2 ? 'pass' : (criticalCount >= 1 ? 'warn' : 'fail'),
+        detail: `${criticalCount} critical engagement marker(s)`,
+    });
+    checklist.push({
+        label: 'Perspective Balance',
+        status: perspectiveBalance === 'well-balanced' || perspectiveBalance === 'balanced' ? 'pass' : (perspectiveBalance === 'mostly one-sided' ? 'warn' : 'fail'),
+        detail: perspectiveBalance.replace(/-/g, ' '),
+    });
+    checklist.push({
+        label: 'Formal Tone',
+        status: toneScore >= 80 ? 'pass' : (toneScore >= 60 ? 'warn' : 'fail'),
+        detail: `${contractionCount} contraction(s), ${informalCount} informal word(s)`,
+    });
 
     const checklistHtml = checklist.map(item => {
         const icon = item.status === 'pass' ? '&#9989;' : item.status === 'warn' ? '&#9888;' : '&#10060;';
@@ -838,12 +923,193 @@ function renderVerifyResults(data) {
         return `
             <div style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;border-bottom:1px solid var(--border);">
                 <span style="font-size:1.1rem;">${icon}</span>
-                <span style="font-weight:600;min-width:160px;">${item.label}</span>
+                <span style="font-weight:600;min-width:160px;">${escapeHtml(item.label)}</span>
                 <span style="color:${color};font-size:0.85rem;">${escapeHtml(item.detail)}</span>
             </div>
         `;
     }).join('');
 
+    // --- Build structure & headings section ---
+    let structureHtml = '';
+
+    // Sub-scores bar
+    const subScoresHtml = `
+        <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+            <div style="flex:1;min-width:120px;background:var(--surface);border-radius:var(--radius);padding:0.75rem;text-align:center;border:1px solid var(--border);">
+                <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;">Structure</div>
+                <div style="font-size:1.5rem;font-weight:700;color:${subScoreColor(structScore)};">${structScore}</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:var(--surface);border-radius:var(--radius);padding:0.75rem;text-align:center;border:1px solid var(--border);">
+                <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;">Argument</div>
+                <div style="font-size:1.5rem;font-weight:700;color:${subScoreColor(argScore)};">${argScore}</div>
+            </div>
+            <div style="flex:1;min-width:120px;background:var(--surface);border-radius:var(--radius);padding:0.75rem;text-align:center;border:1px solid var(--border);">
+                <div style="font-size:0.7rem;color:var(--text-light);text-transform:uppercase;">Formal Tone</div>
+                <div style="font-size:1.5rem;font-weight:700;color:${subScoreColor(toneScore)};">${toneScore}</div>
+            </div>
+        </div>
+    `;
+
+    // Heading hierarchy visualization
+    if (headings.length > 0) {
+        const headingsListHtml = headings.map(h => {
+            const indent = (h.level - 1) * 1.5;
+            const prefix = h.type === 'numbered' && h.number ? `${h.number}. ` : '';
+            const typeIcon = h.type === 'markdown' ? '#' : h.type === 'numbered' ? '1.' : h.type === 'bold' ? 'B' : 'A';
+            return `<div style="margin-left:${indent}rem;padding:0.25rem 0;display:flex;align-items:center;gap:0.5rem;">
+                <span style="font-size:0.7rem;color:var(--text-light);min-width:20px;">${typeIcon}</span>
+                <span style="font-weight:${h.level <= 2 ? '700' : '500'};">${escapeHtml(prefix + h.text)}</span>
+                <span style="font-size:0.7rem;color:var(--text-light);">H${h.level}</span>
+            </div>`;
+        }).join('');
+
+        structureHtml += `
+            <div class="paper-card" style="margin-bottom:1rem;">
+                <div class="paper-title">&#128203; Heading Hierarchy (${headings.length} headings)</div>
+                <div style="margin-top:0.5rem;font-size:0.9rem;">
+                    ${headingsListHtml}
+                </div>
+        `;
+
+        // Hierarchy issues
+        if (hierarchyIssues.length > 0) {
+            structureHtml += `
+                <div style="margin-top:0.75rem;padding:0.5rem;background:rgba(255,193,7,0.1);border-radius:4px;">
+                    <div style="font-weight:600;color:var(--warning);font-size:0.85rem;margin-bottom:0.25rem;">&#9888; Hierarchy Issues:</div>
+                    ${hierarchyIssues.map(i => `<div style="font-size:0.8rem;color:var(--text-light);margin-bottom:0.2rem;">${escapeHtml(i)}</div>`).join('')}
+                </div>
+            `;
+        }
+        structureHtml += `</div>`;
+    }
+
+    // Academic sections found/missing
+    structureHtml += `
+        <div class="paper-card" style="margin-bottom:1rem;">
+            <div class="paper-title">&#128218; Academic Sections</div>
+            <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.5rem;">
+                ${sectionsFound.map(s => `<span style="background:rgba(76,175,80,0.15);color:var(--success);padding:0.25rem 0.6rem;border-radius:12px;font-size:0.8rem;font-weight:500;">&#10003; ${escapeHtml(s)}</span>`).join('')}
+                ${sectionsMissing.map(s => `<span style="background:rgba(244,67,54,0.1);color:var(--danger);padding:0.25rem 0.6rem;border-radius:12px;font-size:0.8rem;font-weight:500;">&#10007; ${escapeHtml(s)}</span>`).join('')}
+            </div>
+            <div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light);">
+                Numbering format: <strong>${numberingFormat === 'none' ? 'Not detected' : escapeHtml(numberingFormat)}</strong>
+            </div>
+        </div>
+    `;
+
+    // --- Build argument & debate section ---
+    let argumentHtml = `
+        <div class="paper-card" style="margin-bottom:1rem;">
+            <div class="paper-title">&#9878; Argument &amp; Debate Quality</div>
+            <div style="margin-top:0.5rem;">
+    `;
+
+    // Thesis statement
+    argumentHtml += `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+            <span style="font-weight:600;min-width:140px;">Thesis Statement:</span>
+            <span style="color:${hasThesis ? 'var(--success)' : 'var(--danger)'};font-size:0.85rem;">
+                ${hasThesis ? '&#9989; Detected' : '&#10060; Not found'}
+            </span>
+        </div>
+    `;
+    if (hasThesis && thesisIndicators.length > 0) {
+        argumentHtml += `<div style="font-size:0.75rem;color:var(--text-light);margin-left:1.5rem;margin-bottom:0.25rem;">Indicators: ${escapeHtml(thesisIndicators.join(', '))}</div>`;
+    }
+
+    // Counterarguments
+    argumentHtml += `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+            <span style="font-weight:600;min-width:140px;">Counterarguments:</span>
+            <span style="color:${counterargCount >= 3 ? 'var(--success)' : counterargCount >= 1 ? 'var(--warning)' : 'var(--danger)'};font-size:0.85rem;">
+                ${counterargCount} marker(s) found
+            </span>
+        </div>
+    `;
+    if (counterargMarkers.length > 0) {
+        argumentHtml += `<div style="font-size:0.75rem;color:var(--text-light);margin-left:1.5rem;margin-bottom:0.25rem;">Markers: ${escapeHtml(counterargMarkers.join(', '))}</div>`;
+    }
+
+    // Evidence & citations
+    argumentHtml += `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+            <span style="font-weight:600;min-width:140px;">Evidence &amp; Citations:</span>
+            <span style="color:${citationCount >= 3 ? 'var(--success)' : evidenceCount >= 1 ? 'var(--warning)' : 'var(--danger)'};font-size:0.85rem;">
+                ${citationCount} citation(s), ${evidenceCount} evidence phrase(s)
+            </span>
+        </div>
+        <div style="font-size:0.75rem;color:var(--text-light);margin-left:1.5rem;margin-bottom:0.25rem;">Citation format: ${escapeHtml(citationFormat)}</div>
+    `;
+
+    // Critical analysis
+    argumentHtml += `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+            <span style="font-weight:600;min-width:140px;">Critical Analysis:</span>
+            <span style="color:${criticalCount >= 2 ? 'var(--success)' : criticalCount >= 1 ? 'var(--warning)' : 'var(--danger)'};font-size:0.85rem;">
+                ${criticalCount} engagement marker(s)
+            </span>
+        </div>
+    `;
+    if (criticalMarkers.length > 0) {
+        argumentHtml += `<div style="font-size:0.75rem;color:var(--text-light);margin-left:1.5rem;margin-bottom:0.25rem;">Markers: ${escapeHtml(criticalMarkers.join(', '))}</div>`;
+    }
+
+    // Perspective balance & argument depth
+    argumentHtml += `
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+            <span style="font-weight:600;min-width:140px;">Perspective Balance:</span>
+            <span style="color:${perspectiveBalance.includes('balanced') ? 'var(--success)' : perspectiveBalance.includes('mostly') ? 'var(--warning)' : 'var(--danger)'};font-size:0.85rem;text-transform:capitalize;">
+                ${escapeHtml(perspectiveBalance.replace(/-/g, ' '))}
+            </span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;">
+            <span style="font-weight:600;min-width:140px;">Argument Depth:</span>
+            <span style="color:${argumentDepth === 'deep' ? 'var(--success)' : argumentDepth === 'moderate' ? 'var(--warning)' : 'var(--danger)'};font-size:0.85rem;text-transform:capitalize;">
+                ${escapeHtml(argumentDepth)}
+            </span>
+        </div>
+    `;
+
+    argumentHtml += `</div></div>`;
+
+    // --- Build academic standards section ---
+    let standardsHtml = `
+        <div class="paper-card" style="margin-bottom:1rem;">
+            <div class="paper-title">&#9999; Academic Writing Standards</div>
+            <div style="margin-top:0.5rem;">
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+                    <span style="font-weight:600;min-width:140px;">Formal Tone Score:</span>
+                    <span style="color:${subScoreColor(toneScore)};font-size:0.85rem;font-weight:600;">${toneScore}/100</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+                    <span style="font-weight:600;min-width:140px;">Contractions:</span>
+                    <span style="color:${contractionCount === 0 ? 'var(--success)' : 'var(--warning)'};font-size:0.85rem;">
+                        ${contractionCount} found ${contractionsFound.length > 0 ? '(' + escapeHtml(contractionsFound.join(', ')) + ')' : ''}
+                    </span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+                    <span style="font-weight:600;min-width:140px;">Informal Language:</span>
+                    <span style="color:${informalCount === 0 ? 'var(--success)' : 'var(--warning)'};font-size:0.85rem;">
+                        ${informalCount} found ${informalWords.length > 0 ? '(' + escapeHtml(informalWords.join(', ')) + ')' : ''}
+                    </span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+                    <span style="font-weight:600;min-width:140px;">Hedging Language:</span>
+                    <span style="color:${hedgingCount > 0 ? 'var(--success)' : 'var(--warning)'};font-size:0.85rem;">
+                        ${hedgingCount} found ${hedgingWords.length > 0 ? '(' + escapeHtml(hedgingWords.slice(0, 5).join(', ')) + ')' : ''}
+                    </span>
+                </div>
+                <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;">
+                    <span style="font-weight:600;min-width:140px;">First-Person Usage:</span>
+                    <span style="color:${firstPersonCount <= 3 ? 'var(--success)' : 'var(--warning)'};font-size:0.85rem;">
+                        ${firstPersonCount} instance(s)
+                    </span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // --- Build suggestions ---
     const suggestionsHtml = suggestions.length ? `
         <div class="paper-card" style="margin-top:1rem;">
             <div class="paper-title">Improvement Suggestions (${suggestions.length})</div>
@@ -852,11 +1118,13 @@ function renderVerifyResults(data) {
                     const msg = typeof s === 'string' ? s : s.message || s.text || JSON.stringify(s);
                     const sev = (typeof s === 'object' && s.severity) ? s.severity : '';
                     const sevColor = sev === 'high' ? 'var(--danger)' : sev === 'medium' ? 'var(--warning)' : 'var(--text-light)';
-                    return `<li style="margin-bottom:0.4rem;">${sev ? `<span style="color:${sevColor};font-weight:600;font-size:0.75rem;text-transform:uppercase;">${sev}</span> ` : ''}${escapeHtml(msg)}</li>`;
+                    const typeLabel = (typeof s === 'object' && s.type) ? s.type : '';
+                    return `<li style="margin-bottom:0.4rem;">${sev ? `<span style="color:${sevColor};font-weight:600;font-size:0.75rem;text-transform:uppercase;">${sev}</span> ` : ''}${typeLabel ? `<span style="color:var(--text-light);font-size:0.7rem;text-transform:uppercase;margin-right:0.3rem;">[${escapeHtml(typeLabel)}]</span>` : ''}${escapeHtml(msg)}</li>`;
                 }).join('')}
             </ul>
         </div>` : '<p style="color:var(--success);margin-top:1rem;font-weight:600;">&#9989; No issues found. Your text follows proper academic format.</p>';
 
+    // --- Assemble full HTML ---
     container.innerHTML = `
         <div class="writing-score-banner" style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem;text-align:center;border:2px solid ${scoreColor};">
             <div style="font-size:0.85rem;color:var(--text-light);margin-bottom:0.25rem;">Academic Format Score</div>
@@ -864,12 +1132,18 @@ function renderVerifyResults(data) {
             <div style="font-size:0.9rem;color:${scoreColor};margin-top:0.25rem;font-weight:600;">${escapeHtml(scoreLabel)}</div>
         </div>
 
+        ${subScoresHtml}
+
         <div class="paper-card" style="margin-bottom:1rem;">
-            <div class="paper-title">Format Checklist</div>
+            <div class="paper-title">&#9989; Format Checklist</div>
             <div style="margin-top:0.5rem;">
                 ${checklistHtml}
             </div>
         </div>
+
+        ${structureHtml}
+        ${argumentHtml}
+        ${standardsHtml}
 
         <div class="writing-stats-grid">
             <div class="stat-card">

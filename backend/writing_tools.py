@@ -225,6 +225,100 @@ def analyze_writing(text: str) -> dict:
             "severity": "medium",
         })
 
+    # --- Enhanced analysis: structure, argument, academic standards ---
+    structure_analysis = _analyze_structure(text)
+    argument_analysis = _analyze_argument_quality(text, sentences, words)
+    standards_analysis = _analyze_academic_standards(text, words)
+
+    # Structure-based suggestions
+    if not structure_analysis["has_hierarchy"]:
+        suggestions.append({
+            "type": "structure",
+            "message": "No headings or section structure detected. Use Markdown headings (#, ##, ###) or numbered sections (1., 1.1.) to organize your text academically.",
+            "severity": "high",
+        })
+    else:
+        for issue in structure_analysis["hierarchy_issues"]:
+            suggestions.append({
+                "type": "structure",
+                "message": issue,
+                "severity": "medium",
+            })
+
+    missing_key_sections = [s for s in structure_analysis["sections_missing"]
+                           if s.lower() in ["introduction", "literature review", "methodology",
+                                            "results", "discussion", "conclusion"]]
+    if missing_key_sections:
+        suggestions.append({
+            "type": "structure",
+            "message": f"Missing key academic sections: {', '.join(missing_key_sections[:5])}. Consider adding these sections for a complete academic structure.",
+            "severity": "medium",
+        })
+
+    # Argument-based suggestions
+    if not argument_analysis["has_thesis_statement"]:
+        suggestions.append({
+            "type": "argument",
+            "message": "No clear thesis or claim statement detected. Add a statement like 'This study argues...' or 'This paper examines...' to establish your central argument.",
+            "severity": "high",
+        })
+
+    if argument_analysis["counterargument_count"] == 0:
+        suggestions.append({
+            "type": "argument",
+            "message": "No counterarguments or opposing viewpoints detected. Engage with alternative perspectives using 'however', 'on the other hand', or 'critics argue' to strengthen your scholarly debate.",
+            "severity": "high",
+        })
+
+    if argument_analysis["evidence_count"] == 0:
+        suggestions.append({
+            "type": "argument",
+            "message": "No evidence or citations detected. Support your claims with inline citations (e.g., Smith, 2020) or phrases like 'according to' and 'as shown by'.",
+            "severity": "high",
+        })
+    elif argument_analysis["citation_count"] == 0 and argument_analysis["evidence_count"] > 0:
+        suggestions.append({
+            "type": "argument",
+            "message": "Evidence phrases found but no formal citations detected. Add inline citations in a consistent format (e.g., APA: (Author, Year) or numbered: [1]).",
+            "severity": "medium",
+        })
+
+    if argument_analysis["critical_analysis_count"] == 0:
+        suggestions.append({
+            "type": "argument",
+            "message": "No critical engagement with prior work detected. Use phrases like 'building on', 'challenging', or 'extending' to show how your work relates to existing scholarship.",
+            "severity": "medium",
+        })
+
+    if argument_analysis["perspective_balance"] in ["one-sided", "mostly one-sided"]:
+        suggestions.append({
+            "type": "argument",
+            "message": f"Argument appears {argument_analysis['perspective_balance']}. Add more counterarguments and alternative perspectives to create a balanced scholarly debate.",
+            "severity": "medium",
+        })
+
+    # Academic standards suggestions
+    if standards_analysis["contraction_count"] > 0:
+        suggestions.append({
+            "type": "tone",
+            "message": f"Found {standards_analysis['contraction_count']} contraction(s) ({', '.join(standards_analysis['contractions_found'][:5])}). Expand contractions to full forms (e.g., 'don't' → 'do not') for academic formality.",
+            "severity": "medium",
+        })
+
+    if standards_analysis["informal_word_count"] > 0:
+        suggestions.append({
+            "type": "tone",
+            "message": f"Found informal/colloquial language: {', '.join(standards_analysis['informal_words'][:5])}. Replace with formal academic equivalents.",
+            "severity": "low",
+        })
+
+    if standards_analysis["first_person_count"] > 3:
+        suggestions.append({
+            "type": "tone",
+            "message": f"Excessive first-person usage ({standards_analysis['first_person_count']} instances). Consider using third-person or objective phrasing (e.g., 'this study' instead of 'I').",
+            "severity": "low",
+        })
+
     # Overall assessment
     if flesch_reading_ease >= 60:
         readability_label = "Good"
@@ -261,11 +355,502 @@ def analyze_writing(text: str) -> dict:
             "label": readability_label,
         },
         "tone_assessment": tone_label,
+        "structure": structure_analysis,
+        "argument": argument_analysis,
+        "academic_standards": standards_analysis,
         "suggestions": suggestions,
         "overall_score": _calculate_writing_score(
             flesch_reading_ease, passive_count, num_sentences,
-            academic_ratio, transition_count, avg_sentence_length
+            academic_ratio, transition_count, avg_sentence_length,
+            structure_analysis["structure_score"],
+            argument_analysis["argument_score"],
+            standards_analysis["formal_tone_score"],
         ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Structure & Heading Analysis
+# ---------------------------------------------------------------------------
+
+# Standard academic sections and their common heading variants
+_ACADEMIC_SECTIONS = {
+    "abstract": ["abstract", "executive summary"],
+    "introduction": ["introduction", "background", "overview"],
+    "literature_review": ["literature review", "review of literature", "related work",
+                          "related literature", "prior research", "theoretical framework",
+                          "conceptual framework"],
+    "methodology": ["methodology", "methods", "research design", "research methodology",
+                    "data and methods", "empirical strategy", "model specification",
+                    "data collection", "sample and data"],
+    "results": ["results", "findings", "empirical results", "analysis",
+                "analytical results", "estimation results"],
+    "discussion": ["discussion", "interpretation", "discussion of results",
+                   "discussion of findings"],
+    "conclusion": ["conclusion", "conclusions", "concluding remarks",
+                   "summary and conclusion", "final remarks"],
+    "references": ["references", "bibliography", "works cited", "reference list"],
+    "acknowledgments": ["acknowledgments", "acknowledgements"],
+    "appendix": ["appendix", "appendices"],
+}
+
+
+def _analyze_structure(text: str) -> dict:
+    """
+    Analyze document structure: headings, hierarchy, academic sections,
+    and numbering format.
+    """
+    lines = text.split('\n')
+    headings = []
+    heading_issues = []
+
+    # --- Detect headings ---
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Markdown headings: #, ##, ###, ####, #####
+        md_match = re.match(r'^(#{1,6})\s+(.+)$', stripped)
+        if md_match:
+            level = len(md_match.group(1))
+            heading_text = md_match.group(2).strip().rstrip('#').strip()
+            headings.append({
+                "level": level,
+                "text": heading_text,
+                "type": "markdown",
+                "line": i + 1,
+            })
+            continue
+
+        # Numbered headings: 1., 1.1., 1.1.1., 2., etc.
+        num_match = re.match(r'^(\d+(?:\.\d+)*)\.?\s+(.+)$', stripped)
+        if num_match:
+            num_str = num_match.group(1)
+            # Determine level by counting dots
+            level = num_str.count('.') + 1
+            heading_text = num_match.group(2).strip()
+            # Only treat as heading if the text is short (< 100 chars) and not a full sentence
+            if len(heading_text) < 100 and not heading_text.endswith('.'):
+                headings.append({
+                    "level": level,
+                    "text": heading_text,
+                    "type": "numbered",
+                    "number": num_str,
+                    "line": i + 1,
+                })
+                continue
+
+        # Bold headings: **Text** or __Text__ on its own line (short, no period)
+        bold_match = re.match(r'^\*\*(.+?)\*\*$', stripped)
+        if bold_match:
+            heading_text = bold_match.group(1).strip()
+            if len(heading_text) < 100 and not heading_text.endswith('.'):
+                headings.append({
+                    "level": 2,  # Default bold to level 2
+                    "text": heading_text,
+                    "type": "bold",
+                    "line": i + 1,
+                })
+                continue
+
+        # ALL CAPS headings (short lines in all caps)
+        if (len(stripped) < 80 and stripped.upper() == stripped
+                and re.search(r'[A-Z]', stripped)
+                and not stripped.endswith('.')
+                and not re.match(r'^[A-Z]\s*$', stripped)):
+            # Check if it looks like a heading (not just an acronym)
+            if len(stripped.split()) <= 10:
+                headings.append({
+                    "level": 1,
+                    "text": stripped,
+                    "type": "caps",
+                    "line": i + 1,
+                })
+                continue
+
+    # --- Validate heading hierarchy ---
+    has_hierarchy = len(headings) > 0
+    prev_level = 0
+    for h in headings:
+        if prev_level > 0 and h["level"] > prev_level + 1:
+            heading_issues.append(
+                f"Heading level skipped: H{prev_level} → H{h['level']} at line {h['line']} "
+                f"(\"{h['text']}\")"
+            )
+        prev_level = h["level"]
+
+    # --- Detect numbering format ---
+    numbering_format = "none"
+    numbered_headings = [h for h in headings if h["type"] == "numbered"]
+    if numbered_headings:
+        # Check if decimal (1., 1.1., 1.1.1.) or simple (1., 2., 3.)
+        has_multi_level = any(h["level"] > 1 for h in numbered_headings)
+        if has_multi_level:
+            numbering_format = "decimal"
+        else:
+            numbering_format = "simple"
+
+        # Check consistency
+        expected_num = 1
+        top_level = [h for h in numbered_headings if h["level"] == 1]
+        for h in top_level:
+            try:
+                actual = int(h["number"])
+                if actual != expected_num:
+                    heading_issues.append(
+                        f"Numbering out of sequence: expected {expected_num}, "
+                        f"got {actual} at line {h['line']}"
+                    )
+                expected_num = actual + 1
+            except ValueError:
+                pass
+
+    # --- Detect academic sections ---
+    sections_found = []
+    sections_missing = []
+    all_heading_text = " ".join(h["text"].lower() for h in headings)
+
+    for section_key, variants in _ACADEMIC_SECTIONS.items():
+        found = any(v in all_heading_text for v in variants)
+        if found:
+            sections_found.append(section_key.replace("_", " ").title())
+        else:
+            sections_missing.append(section_key.replace("_", " ").title())
+
+    # Also check body text for section mentions (less reliable)
+    text_lower = text.lower()
+    if not any("abstract" in s.lower() for s in sections_found):
+        if re.search(r'\babstract\b', text_lower[:500]):
+            sections_found.append("Abstract (in body)")
+            sections_missing = [s for s in sections_missing if not s.lower().startswith("abstract")]
+
+    # --- Calculate structure score ---
+    structure_score = 0
+    if has_hierarchy:
+        structure_score += 30
+    if not heading_issues:
+        structure_score += 20
+    else:
+        structure_score += max(0, 20 - len(heading_issues) * 5)
+    if numbering_format != "none":
+        structure_score += 15
+    # Reward for having key academic sections
+    key_sections = ["Introduction", "Literature Review", "Methodology", "Results",
+                    "Discussion", "Conclusion"]
+    found_count = sum(1 for ks in key_sections if any(ks.lower() in s.lower() for s in sections_found))
+    structure_score += int((found_count / len(key_sections)) * 35)
+
+    return {
+        "headings": headings,
+        "heading_count": len(headings),
+        "has_hierarchy": has_hierarchy,
+        "hierarchy_issues": heading_issues,
+        "numbering_format": numbering_format,
+        "numbering_consistent": len(heading_issues) == 0,
+        "sections_found": sections_found,
+        "sections_missing": sections_missing,
+        "structure_score": max(0, min(100, structure_score)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Argument & Debate Quality Analysis
+# ---------------------------------------------------------------------------
+
+# Thesis/claim statement indicators
+_THESIS_INDICATORS = [
+    "this study argues", "this paper argues", "this research argues",
+    "this study examines", "this paper examines", "this research examines",
+    "this study investigates", "this paper investigates",
+    "this study explores", "this paper explores",
+    "this study aims", "this paper aims", "this research aims",
+    "this study seeks", "this paper seeks",
+    "we hypothesize", "this study hypothesizes",
+    "the objective of this study", "the purpose of this study",
+    "the aim of this study", "the goal of this study",
+    "this study addresses", "this paper addresses",
+    "the central question", "the research question",
+    "this study contends", "this paper contends",
+    "this study demonstrates", "this paper demonstrates",
+    "this study shows", "this paper shows",
+    "this study finds", "this paper finds",
+    "we argue that", "this article argues",
+]
+
+# Counterargument / debate markers
+_COUNTERARGUMENT_MARKERS = [
+    "however", "on the other hand", "in contrast", "conversely",
+    "nevertheless", "nonetheless", "notwithstanding",
+    "critics argue", "critics contend", "critics point out",
+    "skeptics argue", "skeptics contend",
+    "contrary to", "despite this", "despite the",
+    "while some", "while others", "whereas",
+    "alternative view", "alternative perspective",
+    "detractors", "opposing view", "opposing argument",
+    "challenges this", "challenges the",
+    "questions this", "questions the",
+    "contradicts", "disputes", "contests",
+    "but critics", "but some scholars",
+    "a competing", "an alternative explanation",
+    "pushback", "counter-argument", "counterargument",
+]
+
+# Evidence/citation support patterns
+_CITATION_PATTERNS = [
+    (r'\([A-Z][a-z]+(?:\s+(?:et\s+al\.?|and|&)\s+[A-Z][a-z]+)?,?\s*\d{4}[a-z]?\)', "APA"),
+    (r'\([A-Z][a-z]+\s+(?:et\s+al\.?|and|&)\s*\d{4}\)', "APA_et_al"),
+    (r'\[\d+\]', "numbered"),
+    (r'\[\d+(?:,\s*\d+)*\]', "numbered_multi"),
+    (r'[A-Z][a-z]+\s+\(\d{4}\)', "narrative"),
+    (r'[A-Z][a-z]+\s+et\s+al\.?\s+\(\d{4}\)', "narrative_et_al"),
+]
+
+# Evidence/support phrases
+_EVIDENCE_PHRASES = [
+    "according to", "as shown by", "as demonstrated by", "as evidenced by",
+    "as reported by", "as found by", "as noted by", "as observed by",
+    "in line with", "consistent with", "supporting the finding",
+    "empirical evidence", "data show", "data shows", "data indicate",
+    "results indicate", "results show", "results demonstrate",
+    "findings suggest", "findings reveal", "findings indicate",
+    "studies show", "studies indicate", "studies suggest",
+    "research shows", "research indicates", "research suggests",
+    "evidence suggests", "evidence shows", "evidence indicates",
+]
+
+# Critical analysis markers (engaging with and building on prior work)
+_CRITICAL_ANALYSIS_MARKERS = [
+    "building on", "extending", "challenging", "departing from",
+    "diverging from", "complementing", "synthesizing", "reconciling",
+    "in contrast to", "in disagreement with", "in extending",
+    "advancing beyond", "moving beyond", "going beyond",
+    "filling a gap", "addressing a gap", "bridging the gap",
+    "contributing to", "adding to", "enhancing our understanding",
+    "complicating the", "problematizing", "interrogating",
+    "refining the", "reconceptualizing", "rethinking",
+    "while acknowledging", "incorporating", "integrating",
+    "drawing on", "leveraging", "adapting",
+]
+
+
+def _analyze_argument_quality(text: str, sentences: list, words: list) -> dict:
+    """
+    Analyze argument quality: thesis statements, counterarguments,
+    evidence, critical analysis, and perspective balance.
+    """
+    text_lower = text.lower()
+
+    # --- Detect thesis/claim statements ---
+    thesis_indicators_found = []
+    for indicator in _THESIS_INDICATORS:
+        if indicator in text_lower:
+            thesis_indicators_found.append(indicator)
+
+    has_thesis = len(thesis_indicators_found) > 0
+
+    # --- Detect counterarguments ---
+    counterargument_markers_found = []
+    for marker in _COUNTERARGUMENT_MARKERS:
+        count = text_lower.count(marker)
+        if count > 0:
+            counterargument_markers_found.extend([marker] * count)
+
+    counterargument_count = len(counterargument_markers_found)
+
+    # --- Detect evidence/citations ---
+    citation_matches = []
+    citation_formats = set()
+    for pattern, fmt in _CITATION_PATTERNS:
+        matches = re.findall(pattern, text)
+        if matches:
+            citation_matches.extend(matches)
+            citation_formats.add(fmt)
+
+    evidence_phrases_found = []
+    for phrase in _EVIDENCE_PHRASES:
+        count = text_lower.count(phrase)
+        if count > 0:
+            evidence_phrases_found.extend([phrase] * count)
+
+    evidence_count = len(citation_matches) + len(evidence_phrases_found)
+
+    # --- Detect critical analysis ---
+    critical_markers_found = []
+    for marker in _CRITICAL_ANALYSIS_MARKERS:
+        count = text_lower.count(marker)
+        if count > 0:
+            critical_markers_found.extend([marker] * count)
+
+    critical_analysis_count = len(critical_markers_found)
+
+    # --- Assess perspective balance ---
+    if counterargument_count == 0:
+        perspective_balance = "one-sided"
+    elif counterargument_count <= 2:
+        perspective_balance = "mostly one-sided"
+    elif counterargument_count <= 5:
+        perspective_balance = "balanced"
+    else:
+        perspective_balance = "well-balanced"
+
+    # --- Assess argument depth ---
+    depth_score = 0
+    if has_thesis:
+        depth_score += 25
+    if counterargument_count > 0:
+        depth_score += min(25, counterargument_count * 8)
+    if evidence_count > 0:
+        depth_score += min(25, evidence_count * 5)
+    if critical_analysis_count > 0:
+        depth_score += min(25, critical_analysis_count * 8)
+
+    if depth_score >= 70:
+        argument_depth = "deep"
+    elif depth_score >= 40:
+        argument_depth = "moderate"
+    elif depth_score >= 20:
+        argument_depth = "limited"
+    else:
+        argument_depth = "shallow"
+
+    # --- Determine primary citation format ---
+    if citation_formats:
+        if "APA" in citation_formats or "APA_et_al" in citation_formats:
+            citation_format = "APA"
+        elif "numbered" in citation_formats or "numbered_multi" in citation_formats:
+            citation_format = "Numbered"
+        elif "narrative" in citation_formats or "narrative_et_al" in citation_formats:
+            citation_format = "Narrative APA"
+        else:
+            citation_format = list(citation_formats)[0]
+    else:
+        citation_format = "none"
+
+    return {
+        "has_thesis_statement": has_thesis,
+        "thesis_indicators": thesis_indicators_found[:5],
+        "counterargument_count": counterargument_count,
+        "counterargument_markers": list(set(counterargument_markers_found))[:10],
+        "evidence_count": evidence_count,
+        "citation_count": len(citation_matches),
+        "citation_format": citation_format,
+        "evidence_phrases": list(set(evidence_phrases_found))[:10],
+        "critical_analysis_count": critical_analysis_count,
+        "critical_markers": list(set(critical_markers_found))[:10],
+        "perspective_balance": perspective_balance,
+        "argument_depth": argument_depth,
+        "argument_score": max(0, min(100, depth_score)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Academic Writing Standards Analysis
+# ---------------------------------------------------------------------------
+
+# Contractions to detect
+_CONTRACTION_PATTERN = re.compile(
+    r"\b(?:don't|doesn't|didn't|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|"
+    r"won't|wouldn't|can't|cannot|couldn't|shouldn't|it's|that's|there's|here's|"
+    r"let's|they're|we're|you're|I'm|we've|they've|we'll|they'll|I've|I'll|I'd|"
+    r"you'd|could've|should've|would've|might've|must've|who's|what's|where's|"
+    r"when's|why's|how's)\b",
+    re.IGNORECASE,
+)
+
+# Informal/colloquial words
+_INFORMAL_WORDS = {
+    "really", "very", "a lot", "lots of", "kind of", "sort of", "stuff",
+    "things", "okay", "ok", "yeah", "nope", "yep", "gonna", "wanna", "gotta",
+    "kids", "guy", "guys", "cool", "awesome", "great", "big", "huge",
+    "tiny", "super", "totally", "basically", "literally", "obviously",
+    "just", "pretty", "quite", "so", "too", "anyway", "anyways",
+    "moreover", "lastly", "firstly", "secondly",
+}
+
+# Hedging language
+_HEDGING_WORDS = [
+    "may", "might", "could", "would", "should",
+    "suggests", "suggesting", "suggest",
+    "appears to", "appear to", "appears",
+    "seems to", "seem to", "seems",
+    "tends to", "tend to",
+    "possibly", "likely", "perhaps", "probably", "potentially",
+    "arguably", "presumably", "supposedly", "purportedly",
+    "to some extent", "to a certain degree",
+    "it is possible that", "it appears that", "it seems that",
+    "there is evidence to suggest",
+]
+
+# First person pronouns
+_FIRST_PERSON_PATTERN = re.compile(
+    r'\b(?:I|we|our|ours|us|my|mine|myself)\b',
+    re.IGNORECASE,
+)
+
+
+def _analyze_academic_standards(text: str, words: list) -> dict:
+    """
+    Analyze academic writing standards: formal tone, hedging,
+    citation format, and first-person usage.
+    """
+    text_lower = text.lower()
+
+    # --- Detect contractions ---
+    contraction_matches = _CONTRACTION_PATTERN.findall(text)
+    contractions_found = list(set(c.lower() for c in contraction_matches))
+
+    # --- Detect informal words ---
+    informal_words_found = []
+    for word in words:
+        if word.lower() in _INFORMAL_WORDS:
+            informal_words_found.append(word.lower())
+    informal_words_found = list(set(informal_words_found))
+
+    # --- Detect hedging language ---
+    hedging_found = []
+    for hedge in _HEDGING_WORDS:
+        count = text_lower.count(hedge)
+        if count > 0:
+            hedging_found.extend([hedge] * count)
+
+    # --- Detect first-person usage ---
+    first_person_matches = _FIRST_PERSON_PATTERN.findall(text)
+    # Filter out "I" as part of citations like (Author, I.) or Roman numerals
+    first_person_count = 0
+    for match in first_person_matches:
+        # Check context - skip if it's likely a citation or abbreviation
+        idx = text.find(match)
+        context_before = text[max(0, idx-5):idx]
+        context_after = text[idx+len(match):idx+len(match)+5]
+        if re.search(r'[,(]\s*$', context_before) or re.match(r'^\s*[.,)]', context_after):
+            continue
+        first_person_count += 1
+
+    # --- Calculate formal tone score ---
+    num_words = len(words) if words else 1
+    tone_score = 100
+    tone_score -= min(30, len(contraction_matches) * 10)
+    tone_score -= min(20, len(informal_words_found) * 5)
+    tone_score -= min(15, first_person_count * 3)
+
+    # Hedging is good in moderation (academic caution)
+    if len(hedging_found) == 0:
+        tone_score -= 5  # Too confident, lacks academic hedging
+    elif len(hedging_found) > num_words * 0.05:
+        tone_score -= 10  # Too much hedging, appears uncertain
+    else:
+        tone_score += 5  # Appropriate hedging
+
+    return {
+        "contraction_count": len(contraction_matches),
+        "contractions_found": contractions_found[:10],
+        "informal_word_count": len(informal_words_found),
+        "informal_words": informal_words_found[:10],
+        "hedging_count": len(hedging_found),
+        "hedging_words": list(set(hedging_found))[:10],
+        "first_person_count": first_person_count,
+        "formal_tone_score": max(0, min(100, tone_score)),
     }
 
 
@@ -296,55 +881,76 @@ def _count_complex_words(words: list[str]) -> int:
 
 def _calculate_writing_score(flesch: float, passive: int, sentences: int,
                               academic_ratio: float, transitions: int,
-                              avg_length: float) -> int:
-    """Calculate an overall writing quality score (0-100)."""
-    score = 50  # Start at middle
+                              avg_length: float,
+                              structure_score: int = 0,
+                              argument_score: int = 0,
+                              formal_tone_score: int = 0) -> int:
+    """
+    Calculate an overall writing quality score (0-100).
+    Combines readability, style, structure, argument, and tone.
+    """
+    # Base score from readability and style (max 55)
+    style_score = 30  # Start at base
 
     # Readability (target: 30-60 for academic writing)
     if 30 <= flesch <= 60:
-        score += 15
+        style_score += 10
     elif 20 <= flesch <= 70:
-        score += 10
+        style_score += 5
     else:
-        score -= 5
+        style_score -= 5
 
     # Passive voice (lower is better)
     if sentences > 0:
         passive_ratio = passive / sentences
         if passive_ratio < 0.15:
-            score += 10
+            style_score += 5
         elif passive_ratio < 0.3:
-            score += 5
+            style_score += 3
         else:
-            score -= 10
+            style_score -= 5
 
     # Academic vocabulary
     if academic_ratio >= 0.05:
-        score += 15
+        style_score += 5
     elif academic_ratio >= 0.03:
-        score += 10
+        style_score += 3
     elif academic_ratio >= 0.01:
-        score += 5
+        style_score += 2
 
     # Transitions
     if sentences > 0:
         trans_ratio = transitions / sentences
         if trans_ratio >= 0.2:
-            score += 10
+            style_score += 5
         elif trans_ratio >= 0.1:
-            score += 5
+            style_score += 3
         else:
-            score -= 5
+            style_score -= 3
 
-    # Sentence length (ideal: 15-20 for academic)
+    # Sentence length (ideal: 15-25 for academic)
     if 15 <= avg_length <= 25:
-        score += 10
+        style_score += 5
     elif 10 <= avg_length <= 30:
-        score += 5
+        style_score += 3
     else:
-        score -= 5
+        style_score -= 3
 
-    return max(0, min(100, score))
+    style_score = max(0, min(100, style_score))
+
+    # Weighted combination:
+    # Style/readability: 30%
+    # Structure: 25%
+    # Argument quality: 25%
+    # Formal tone: 20%
+    overall = (
+        style_score * 0.30 +
+        structure_score * 0.25 +
+        argument_score * 0.25 +
+        formal_tone_score * 0.20
+    )
+
+    return max(0, min(100, round(overall)))
 
 
 # ---------------------------------------------------------------------------
