@@ -15,5 +15,11 @@ services:
         sync: false
       - key: SEMANTIC_SCHOLAR_API_KEY
         sync: false
+      - key: THEEYE_DATA_FILE
+        value: "/data/users.json"
     healthCheckPath: /api/health
     autoDeploy: true
+    disk:
+      name: theeye-data
+      mountPath: /data
+      sizeGB: 1

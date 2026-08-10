@@ -4,6 +4,7 @@
 const API_BASE = '';
 const TOKEN_KEY = 'theeye_token';
 const USER_KEY = 'theeye_user';
+const REMEMBER_EMAIL_KEY = 'theeye_remember_email';
 
 let authToken = localStorage.getItem(TOKEN_KEY);
 let currentUser = null;
@@ -90,6 +91,7 @@ function hideAuthError(elementId) {
 document.getElementById('loginBtn').addEventListener('click', async () => {
     const email = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
+    const remember = document.getElementById('rememberMe').checked;
     hideAuthError('loginError');
 
     if (!email || !password) {
@@ -105,12 +107,20 @@ document.getElementById('loginBtn').addEventListener('click', async () => {
         const resp = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ email, password, remember }),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Login failed');
 
         saveAuth(data.token, data.user);
+
+        // Store or clear remembered email
+        if (remember) {
+            localStorage.setItem(REMEMBER_EMAIL_KEY, email);
+        } else {
+            localStorage.removeItem(REMEMBER_EMAIL_KEY);
+        }
+
         showMainApp();
     } catch (err) {
         showAuthError('loginError', err.message);
@@ -189,8 +199,26 @@ document.getElementById('loginEmail').addEventListener('keypress', e => {
     if (e.key === 'Enter') document.getElementById('loginPassword').focus();
 });
 
-// On page load: check if already authenticated
+// On page load: check if already authenticated (token still valid)
+// If not, pre-fill remembered email so the user only needs their password
 (async function init() {
+    // Pre-fill remembered email
+    const rememberedEmail = localStorage.getItem(REMEMBER_EMAIL_KEY);
+    if (rememberedEmail) {
+        const emailInput = document.getElementById('loginEmail');
+        if (emailInput) {
+            emailInput.value = rememberedEmail;
+            // Focus password field since email is already filled
+            setTimeout(() => {
+                const pwdInput = document.getElementById('loginPassword');
+                if (pwdInput) pwdInput.focus();
+            }, 100);
+        }
+        // Ensure Remember Me is checked
+        const rememberCheckbox = document.getElementById('rememberMe');
+        if (rememberCheckbox) rememberCheckbox.checked = true;
+    }
+
     if (authToken) {
         try {
             const resp = await apiFetch('/api/auth/me');
@@ -202,7 +230,9 @@ document.getElementById('loginEmail').addEventListener('keypress', e => {
                 return;
             }
         } catch { /* fall through */ }
-        clearAuth();
+        // Token is invalid/expired — clear it but keep remembered email
+        authToken = null;
+        localStorage.removeItem(TOKEN_KEY);
     }
     showAuthScreen();
 })();

@@ -475,7 +475,7 @@ async def register(request: RegisterRequest):
 async def login(request: LoginRequest):
     """Login with email and password."""
     try:
-        result = login_user(request.email, request.password)
+        result = login_user(request.email, request.password, remember=request.remember)
         return result
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
