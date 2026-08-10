@@ -679,6 +679,8 @@ def _parse_prompt(prompt: str) -> tuple[str, str]:
         "literature review": "literature_review",
         "lit review": "literature_review",
         "introduction": "introduction",
+        "methodology": "methodology",
+        "method": "methodology",
         "abstract": "abstract",
         "conclusion": "conclusion",
         "summary": "summary",

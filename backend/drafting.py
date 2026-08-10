@@ -562,6 +562,138 @@ def _generate_abstract(topic: str, papers: list[Paper],
     return abstract
 
 
+def _generate_methodology(topic: str, papers: list[Paper],
+                          extracted: list[ExtractedData],
+                          max_words: int) -> str:
+    """Generate a methodology draft grounded in the reviewed literature.
+
+    The section describes the research design, data sources, variables, and
+    estimation techniques, drawing on the methodological information extracted
+    from the source papers.
+    """
+    if not papers:
+        return "No papers available. Please search first.\n"
+
+    # Gather methodology info from extracted data
+    methods = [e.methodology for e in extracted if e.methodology]
+    data_sources = [e.data_source for e in extracted if e.data_source]
+    samples = [e.sample_size for e in extracted if e.sample_size]
+    all_vars = []
+    for e in extracted:
+        all_vars.extend(e.variables)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_methods = []
+    for m in methods:
+        key = m.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            unique_methods.append(m)
+    method_str = ", ".join(unique_methods[:4]) if unique_methods else \
+        "panel data analysis with fixed-effects and random-effects estimators"
+
+    seen_ds = set()
+    unique_sources = []
+    for ds in data_sources:
+        key = ds.lower().strip()
+        if key not in seen_ds:
+            seen_ds.add(key)
+            unique_sources.append(ds)
+    source_str = "; ".join(unique_sources[:4]) if unique_sources else \
+        "World Bank World Development Indicators, IMF International Financial Statistics, and Transparency International"
+
+    sample_str = samples[0] if samples else "annual data spanning the period 2000-2023"
+
+    unique_vars = []
+    seen_v = set()
+    for v in all_vars:
+        key = v.lower().strip()
+        if key not in seen_v:
+            seen_v.add(key)
+            unique_vars.append(v)
+    vars_str = ", ".join(unique_vars[:8]) if unique_vars else \
+        "foreign direct investment (FDI) net inflows, GDP growth rate, institutional quality indices, trade openness, inflation, and gross capital formation"
+
+    parts = [
+        f"## Methodology\n\n",
+        f"This section outlines the research design, data sources, and analytical "
+        f"techniques employed to investigate {topic.lower()}. The methodological "
+        f"approach is informed by the strategies adopted in the reviewed studies, "
+        f"ensuring both rigor and comparability with the existing literature "
+        f"{_in_text_citation(papers[0], 1)}.\n\n",
+    ]
+
+    # Research design and approach
+    parts.append(f"### Research Design and Approach\n\n")
+    parts.append(
+        f"The study adopts a quantitative research design utilising {method_str.lower()}. "
+        f"This approach is consistent with the dominant methodological paradigm in the field, "
+        f"as several studies examining {topic.lower()} have employed similar frameworks "
+    )
+    for i, p in enumerate(papers[1:3], 2):
+        parts.append(f"{_in_text_citation(p, i)} ")
+    parts.append(
+        f". The choice of design is motivated by the need to establish empirical "
+        f"relationships among variables while controlling for unobserved heterogeneity "
+        f"and potential endogeneity concerns. Both fixed-effects and random-effects "
+        f"specifications are estimated, with the Hausman test guiding the selection "
+        f"of the preferred model.\n\n"
+    )
+
+    # Data sources and variables
+    parts.append(f"### Data Sources and Variables\n\n")
+    parts.append(
+        f"The analysis draws on {source_str}. The dataset comprises {sample_str}, "
+        f"providing sufficient observations for robust econometric inference. "
+        f"The dependent variable and key explanatory variables are constructed "
+        f"following standard practices in the literature "
+    )
+    for i, p in enumerate(papers[3:5], 4):
+        if i <= len(papers):
+            parts.append(f"{_in_text_citation(p, i)} ")
+    parts.append(
+        f".\n\nThe core variables include: {vars_str}. Control variables are "
+        f"incorporated to account for structural differences across units and "
+        f"over time. All variables are transformed into natural logarithms where "
+        f"appropriate to interpret coefficients as elasticities and to reduce "
+        f"the influence of outliers.\n\n"
+    )
+
+    # Estimation techniques and model specification
+    parts.append(f"### Estimation Techniques and Model Specification\n\n")
+    parts.append(
+        f"The baseline empirical model is specified as follows:\n\n"
+        f"    Y_it = β₀ + β₁X_it + β₂Z_it + μ_i + λ_t + ε_it\n\n"
+        f"where Y_it denotes the dependent variable for unit i at time t, "
+        f"X_it represents the principal explanatory variable(s), Z_it is a "
+        f"vector of controls, μ_i captures unobserved unit-specific effects, "
+        f"λ_t represents time-specific effects, and ε_it is the idiosyncratic "
+        f"error term. The parameters of interest are the β coefficients, "
+        f"estimated using {method_str.lower()}.\n\n"
+    )
+    parts.append(
+        f"Robustness checks include alternative model specifications, "
+        f"sub-sample analysis, and diagnostic tests for serial correlation, "
+        f"heteroskedasticity, and cross-sectional dependence. Where endogeneity "
+        f"is a concern, instrumental variable (IV) estimation or the generalised "
+        f"method of moments (GMM) estimator is employed, following the approaches "
+    )
+    for i, p in enumerate(papers[5:7], 6):
+        if i <= len(papers):
+            parts.append(f"{_in_text_citation(p, i)} ")
+    parts.append(
+        f". Standard errors are clustered at the unit level to account for "
+        f"within-group correlation.\n"
+    )
+
+    text = "".join(parts)
+    words = text.split()
+    if len(words) > max_words:
+        text = " ".join(words[:max_words]) + "..."
+    return text
+
+
 def _generate_conclusion(topic: str, papers: list[Paper],
                          extracted: list[ExtractedData],
                          max_words: int) -> str:
@@ -663,6 +795,7 @@ def generate_draft(request: DraftRequest) -> DraftResponse:
     generators = {
         "literature_review": _generate_literature_review,
         "introduction": _generate_introduction,
+        "methodology": _generate_methodology,
         "abstract": _generate_abstract,
         "conclusion": _generate_conclusion,
         "summary": _generate_summary,

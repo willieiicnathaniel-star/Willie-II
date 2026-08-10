@@ -174,7 +174,7 @@ class AuthResponse(BaseModel):
 class QuickGenerateRequest(BaseModel):
     prompt: str = Field(..., description="Research prompt, e.g., 'Write a literature review on FDI and economic growth in Africa'")
     section_type: str = Field(default="literature_review",
-                              description="Section to generate: literature_review, introduction, abstract, conclusion, summary")
+                              description="Section to generate: literature_review, introduction, methodology, abstract, conclusion, summary")
     databases: list[str] = Field(default=["openalex", "crossref", "semantic_scholar", "google_scholar", "econpapers", "eric"])
     quartiles: list[str] = Field(default=["Q1", "Q2", "Q3"])
     year_from: Optional[int] = None

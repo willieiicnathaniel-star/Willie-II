@@ -216,6 +216,10 @@ SYSTEM_PROMPTS = {
         "  ### Background and Context\n"
         "  ### Research Problem and Gap\n"
         "  ### Objectives and Contribution\n\n"
+        "For a Methodology:\n"
+        "  ### Research Design and Approach\n"
+        "  ### Data Sources and Variables\n"
+        "  ### Estimation Techniques and Model Specification\n\n"
         "For a Conclusion:\n"
         "  ### Summary of Key Findings\n"
         "  ### Policy Implications\n"
@@ -868,6 +872,7 @@ def _ensure_heading(text: str, section_type: str, topic: str) -> str:
     section_labels = {
         "literature_review": f"## Literature Review: {topic}",
         "introduction": "## Introduction",
+        "methodology": f"## Methodology: {topic}",
         "abstract": "## Abstract",
         "conclusion": "## Conclusion",
         "summary": "## Summary",
@@ -889,6 +894,11 @@ _SUBHEADING_SETS = {
         "### Background and Context",
         "### Research Problem and Gap",
         "### Objectives and Contribution",
+    ],
+    "methodology": [
+        "### Research Design and Approach",
+        "### Data Sources and Variables",
+        "### Estimation Techniques and Model Specification",
     ],
     "conclusion": [
         "### Summary of Key Findings",
@@ -1112,7 +1122,7 @@ async def generate_academic_text(
 
     Args:
         topic: The research topic
-        section_type: literature_review, introduction, abstract, conclusion, summary
+        section_type: literature_review, introduction, methodology, abstract, conclusion, summary
         context: Additional context (source summaries, extracted data, etc.)
         max_words: Target word count
 
